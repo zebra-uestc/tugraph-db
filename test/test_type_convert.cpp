@@ -101,4 +101,16 @@ TEST_F(TestTypeConvert, TypeConvert) {
     UT_EXPECT_TRUE(ValueToFieldData(Value::ConstRef(vec), FieldType::FLOAT_VECTOR).AsFloatVector() == vec );
     UT_EXPECT_EQ(ValueToFieldData(Value::ConstRef(vec), FieldType::FLOAT_VECTOR).ToString(), "1.111000,2.111000,3.111000,4.111000");
 
+    // Testing double vector data
+    std::vector<double> vec_double = {1.111, 2.111, 3.111, 4.111};
+    UT_EXPECT_TRUE(ValueToFieldData(Value::ConstRef(vec_double), FieldType::DOUBLE_VECTOR).AsDoubleVector() == vec_double);
+    UT_EXPECT_EQ(ValueToFieldData(Value::ConstRef(vec_double), FieldType::DOUBLE_VECTOR).ToString(), "1.111000,2.111000,3.111000,4.111000");
+    
+    // Testing binary vector data
+    std::string orig_binary = "example data";
+    std::vector<uint8_t> vec_binary(orig_binary.begin(), orig_binary.end());
+    std::string encoded_binary = ::lgraph_api::base64::Encode(orig_binary);
+    UT_EXPECT_TRUE(ValueToFieldData(Value::ConstRef(vec_binary), FieldType::BINARY_VECTOR).AsBinaryVector() == vec_binary);
+    UT_EXPECT_EQ(ValueToFieldData(Value::ConstRef(vec_binary), FieldType::BINARY_VECTOR).ToString(), encoded_binary);
+
 }

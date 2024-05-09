@@ -66,11 +66,13 @@ static constexpr const char* FieldTypeNames[] = {"NUL",   "BOOL",     "INT8",   
                                                  "INT32", "INT64",    "FLOAT",  "DOUBLE",
                                                  "DATE",  "DATETIME", "STRING", "BLOB",
                                                  "POINT", "LINESTRING", "POLYGON", "SPATIAL", 
-                                                 "FLOAT_VECTOR"};
+                                                 "FLOAT_VECTOR", "DOUBLE_VECTOR",
+                                                 "BINARY_VECTOR"};
 
 static std::unordered_map<std::string, FieldType> _FieldName2TypeDict_() {
     std::unordered_map<std::string, FieldType> ret;
-    for (int i = 0; i <= (int)FieldType::FLOAT_VECTOR; i++) {
+    int fieldTypesCount = sizeof(FieldTypeNames) / sizeof(FieldTypeNames[0]);
+    for (int i = 0; i < fieldTypesCount; i++) {
         ret[FieldTypeNames[i]] = FieldType(i);
         ret[fma_common::ToLower(FieldTypeNames[i])] = FieldType(i);
     }
@@ -94,7 +96,9 @@ static constexpr size_t FieldTypeSizes[] = {
     0,   // LineString
     0,   // Polygon
     0,   // Spatial
-    0    // float vector
+    0,   // float vector
+    0,   // double vector
+    0    // binary vector
 };
 
 static constexpr bool IsFixedLengthType[] = {
@@ -114,7 +118,9 @@ static constexpr bool IsFixedLengthType[] = {
     false,  // LineString
     false,  // Polygon
     false,  // Spatial
-    false   // float vector 
+    false,  // float vector
+    false,  // double vector
+    false   // binary vector 
 };
 
 template <class T, size_t N>
@@ -145,7 +151,7 @@ inline constexpr bool IsFixedLengthFieldType(FieldType dt) {
 }
 
 inline std::string TryGetFieldTypeName(FieldType ft) {
-    if (ft >= FieldType::NUL && ft <= FieldType::FLOAT_VECTOR) return FieldTypeName(ft);
+    if (ft >= FieldType::NUL && ft <= FieldType::BINARY_VECTOR) return FieldTypeName(ft);
     return fma_common::StringFormatter::Format("[Illegal FieldType, value={}]", (int)ft);
 }
 
@@ -224,6 +230,14 @@ struct FieldType2StorageType<FieldType::SPATIAL> {
 template <>
 struct FieldType2StorageType<FieldType::FLOAT_VECTOR> {
     typedef std::vector<float> type;
+};
+template <>
+struct FieldType2StorageType<FieldType::DOUBLE_VECTOR> {
+    typedef std::vector<double> type;
+};
+template <>
+struct FieldType2StorageType<FieldType::BINARY_VECTOR> {
+    typedef std::vector<uint8_t> type;
 };
 
 template <FieldType FT>
@@ -431,6 +445,24 @@ struct FieldDataRangeCheck<FieldType::FLOAT_VECTOR> {
     }
 };
 
+template <>
+struct FieldDataRangeCheck<FieldType::DOUBLE_VECTOR> {
+    template <typename FromT>
+    static inline bool CheckAndCopy(const FromT& src,
+                                    typename FieldType2StorageType<FieldType::DOUBLE_VECTOR>::type& dst) {
+        return true;
+    }
+};
+
+template <>
+struct FieldDataRangeCheck<FieldType::BINARY_VECTOR> {
+    template <typename FromT>
+    static inline bool CheckAndCopy(const FromT& src,
+                                    typename FieldType2StorageType<FieldType::BINARY_VECTOR>::type& dst) {
+        return true;
+    }
+};
+
 template <FieldType DstType>
 inline bool CopyFdIntoDstStorageType(const FieldData& fd,
                                      typename FieldType2StorageType<DstType>::type& dst) {
@@ -487,6 +519,10 @@ inline Value GetConstRefOfFieldDataContent(const FieldData& fd) {
         return Value::ConstRef(*fd.data.buf);
     case FieldType::FLOAT_VECTOR:
         return Value::ConstRef(*fd.data.vp);
+    case FieldType::DOUBLE_VECTOR:
+        return Value::ConstRef(*fd.data.vdp);
+    case FieldType::BINARY_VECTOR:
+        return Value::ConstRef(*fd.data.vb);
     }
     FMA_ASSERT(false);
     return Value();
@@ -580,6 +616,18 @@ GetStoredValue<FieldType::FLOAT_VECTOR>(
     const FieldData& fd) {
     return *fd.data.vp;
 }
+template <>
+inline const typename FieldType2StorageType<FieldType::DOUBLE_VECTOR>::type&
+GetStoredValue<FieldType::DOUBLE_VECTOR>(
+    const FieldData& fd) {
+    return *fd.data.vdp;
+}
+template <>
+inline const typename FieldType2StorageType<FieldType::BINARY_VECTOR>::type&
+GetStoredValue<FieldType::BINARY_VECTOR>(
+    const FieldData& fd) {
+    return *fd.data.vb;
+}
 
 template <FieldType FT>
 inline typename FieldType2CType<FT>::type GetFieldDataCValue(const FieldData& fd) {
@@ -668,6 +716,14 @@ template <>
 inline bool IsCompatibleType<FieldType::FLOAT_VECTOR>(FieldType st) {
     return st == FieldType::FLOAT_VECTOR;
 }
+template <>
+inline bool IsCompatibleType<FieldType::DOUBLE_VECTOR>(FieldType st) {
+    return st == FieldType::DOUBLE_VECTOR;
+}
+template <>
+inline bool IsCompatibleType<FieldType::BINARY_VECTOR>(FieldType st) {
+    return st == FieldType::BINARY_VECTOR;
+}
 
 template <FieldType DstType>
 inline size_t ParseStringIntoFieldData(const char* beg, const char* end, FieldData& fd) {
@@ -715,6 +771,39 @@ inline size_t ParseStringIntoFieldData<FieldType::FLOAT_VECTOR>(const char* beg,
         ++begin_it; 
     }    
     fd = FieldData::FloatVector(vec);
+    return s;
+}
+template <>
+inline size_t ParseStringIntoFieldData<FieldType::DOUBLE_VECTOR>(const char* beg, const char* end,
+                                                          FieldData& fd) {
+    std::string cd;
+    size_t s = fma_common::TextParserUtils::ParseCsvString(beg, end, cd);
+    if (s == 0) return 0;
+    std::vector<double> vec;
+    std::regex pattern("-?[0-9]+\\.?[0-9]*([eE][-+]?[0-9]+)?");
+    std::sregex_iterator begin_it(cd.begin(), cd.end(), pattern), end_it;
+    while (begin_it != end_it) {  
+        std::smatch match = *begin_it;  
+        vec.push_back(std::stod(match.str()));  
+        ++begin_it; 
+    }    
+    fd = FieldData::DoubleVector(vec);
+    return s;
+}
+template <>
+inline size_t ParseStringIntoFieldData<FieldType::BINARY_VECTOR>(const char* beg, const char* end,
+                                                          FieldData& fd) {
+    std::string cd;
+    size_t s = fma_common::TextParserUtils::ParseCsvString(beg, end, cd);
+    if (s == 0) return 0;
+    std::vector<uint8_t> vec;
+    std::string decoded;
+    if (!::lgraph_api::base64::TryDecode(cd, decoded)) {
+        THROW_CODE(InputError, "Value is not a valid BASE64 string: " + cd.substr(0, 64) +
+                         (cd.size() > 64 ? "..." : ""));
+    }
+    vec.assign(decoded.begin(), decoded.end());
+    fd = FieldData::BinaryVector(vec);
     return s;
 }
 
@@ -799,8 +888,34 @@ inline bool ParseStringIntoStorageType<FieldType::FLOAT_VECTOR>
     if (sd.size() <= 1) {
         return false;
     } else {   
-    return true;
+        return true;
     }
+}
+template <>
+inline bool ParseStringIntoStorageType<FieldType::DOUBLE_VECTOR>
+(const std::string& str, std::vector<double>& sd) {
+    std::regex pattern("-?[0-9]+\\.?[0-9]*([eE][-+]?[0-9]+)?");
+    std::sregex_iterator begin_it(str.begin(), str.end(), pattern), end_it;
+    while (begin_it != end_it) {  
+        std::smatch match = *begin_it;  
+        sd.push_back(std::stod(match.str()));  
+        ++begin_it; 
+    }
+    if (sd.size() <= 1) {
+        return false;
+    } else {   
+        return true;
+    }
+}
+template <>
+inline bool ParseStringIntoStorageType<FieldType::BINARY_VECTOR>(
+    const std::string& str, std::vector<uint8_t>& sd) {
+    std::string decoded;
+    if (!::lgraph_api::base64::TryDecode(str, decoded)) {
+        return false;  
+    }
+    sd.assign(decoded.begin(), decoded.end());
+    return true;
 }
 
 // This converts FieldData of different type into DstType
@@ -862,6 +977,12 @@ struct FieldDataTypeConvert {
             break;
         case FieldType::FLOAT_VECTOR:
             // nothing can be converted from float vector
+            break;
+        case FieldType::DOUBLE_VECTOR:
+            // nothing can be converted from double vector
+            break;
+        case FieldType::BINARY_VECTOR:
+            // nothing can be converted from binary vector
             break;
         }
         return false;
@@ -931,6 +1052,10 @@ inline size_t ParseStringIntoFieldData(FieldType ft, const char* b, const char* 
         throw std::runtime_error("do not support spatial now!");
     case FieldType::FLOAT_VECTOR:
         return ParseStringIntoFieldData<FieldType::FLOAT_VECTOR>(b, e, fd);
+    case FieldType::DOUBLE_VECTOR:
+        return ParseStringIntoFieldData<FieldType::DOUBLE_VECTOR>(b, e, fd);
+    case FieldType::BINARY_VECTOR:
+        return ParseStringIntoFieldData<FieldType::BINARY_VECTOR>(b, e, fd);
     }  // switch
     FMA_ASSERT(false);
     return 0;
@@ -1038,6 +1163,16 @@ inline bool TryFieldDataToValueOfFieldType(const FieldData& fd, FieldType ft, Va
             throw std::runtime_error("cannot convert any type to float vector");
             return false;
         }
+    case FieldType::DOUBLE_VECTOR:
+        {
+            throw std::runtime_error("cannot convert any type to double vector");
+            return false;
+        }
+    case FieldType::BINARY_VECTOR:
+        {
+            throw std::runtime_error("cannot convert any type to binary vector");
+            return false;
+        }        
     }
 
     FMA_ASSERT(false);
@@ -1152,6 +1287,34 @@ static inline Value ParseStringToValueOfFieldType(const std::string& str, FieldT
             v.Copy(vec);
             return v;
         }
+    case FieldType::DOUBLE_VECTOR:
+        {
+            std::vector<double> vec;
+            std::regex pattern("-?[0-9]+\\.?[0-9]*([eE][-+]?[0-9]+)?");
+            std::sregex_iterator begin_it(str.begin(), str.end(), pattern), end_it;
+            while (begin_it != end_it) {  
+                std::smatch match = *begin_it;  
+                vec.push_back(std::stod(match.str())); 
+                ++begin_it; 
+            }
+            if (vec.size() <= 1) {
+                ThrowParseError(str, FieldType::DOUBLE_VECTOR);
+            }
+            Value v;
+            v.Copy(vec);
+            return v;
+        }
+    case FieldType::BINARY_VECTOR:
+        {
+            std::string decoded;
+            if (!::lgraph_api::base64::TryDecode(str.data(), str.size(), decoded)) {
+                ThrowParseError(str, FieldType::BINARY_VECTOR);
+            }
+            std::vector<uint8_t> vec(decoded.begin(), decoded.end());
+            Value v;
+            v.Copy(vec);
+            return v;
+        }
     }
     FMA_ASSERT(false);
     return Value();
@@ -1240,6 +1403,10 @@ inline FieldData ValueToFieldData(const Value& v, FieldType ft) {
         }
     case FieldType::FLOAT_VECTOR:
         return FieldData(v.AsType<std::vector<float>>());
+    case FieldType::DOUBLE_VECTOR:
+        return FieldData(v.AsType<std::vector<double>>());
+    case FieldType::BINARY_VECTOR:
+        return FieldData(v.AsType<std::vector<uint8_t>>());        
     }
     FMA_ASSERT(false);
     return FieldData();
@@ -1296,6 +1463,18 @@ inline int ValueCompare<FieldType::SPATIAL>(const void* p1, size_t s1, const voi
 
 template <>
 inline int ValueCompare<FieldType::FLOAT_VECTOR>(const void* p1, size_t s1, const void* p2, size_t s2) {
+    std::runtime_error("you cannot compare vectors");
+    abort();
+}
+
+template <>
+inline int ValueCompare<FieldType::DOUBLE_VECTOR>(const void* p1, size_t s1, const void* p2, size_t s2) {
+    std::runtime_error("you cannot compare vectors");
+    abort();
+}
+
+template <>
+inline int ValueCompare<FieldType::BINARY_VECTOR>(const void* p1, size_t s1, const void* p2, size_t s2) {
     std::runtime_error("you cannot compare vectors");
     abort();
 }

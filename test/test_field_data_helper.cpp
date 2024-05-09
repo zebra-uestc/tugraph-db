@@ -42,7 +42,7 @@ void CheckFieldTypeSizeNameIsFixed(::lgraph::FieldType ft, const std::string& na
 
 TEST_F(TestFieldDataHelper, FieldTypeSize) {
     UT_LOG() << "Testing FieldTypeSize, FieldTypeName and IsFixedLengthFieldType";
-    for (int ft = (int)FieldType::NUL; ft <= (int)FieldType::FLOAT_VECTOR; ft++) {
+    for (int ft = (int)FieldType::NUL; ft <= (int)FieldType::BINARY_VECTOR; ft++) {
         FieldType parsed;
         UT_EXPECT_TRUE(TryGetFieldType(FieldTypeName((FieldType)ft), parsed));
         UT_EXPECT_EQ((int)parsed, ft);
@@ -68,6 +68,8 @@ TEST_F(TestFieldDataHelper, FieldTypeSize) {
     CheckFieldTypeSizeNameIsFixed(FieldType::POLYGON, "POLYGON", 0, false);
     CheckFieldTypeSizeNameIsFixed(FieldType::SPATIAL, "SPATIAL", 0, false);
     CheckFieldTypeSizeNameIsFixed(FieldType::FLOAT_VECTOR, "FLOAT_VECTOR", 0, false);
+    CheckFieldTypeSizeNameIsFixed(FieldType::DOUBLE_VECTOR, "DOUBLE_VECTOR", 0, false);
+    CheckFieldTypeSizeNameIsFixed(FieldType::BINARY_VECTOR, "BINARY_VECTOR", 0, false);
 }
 
 TEST_F(TestFieldDataHelper, FieldTypeStorageType) {
@@ -235,6 +237,16 @@ TEST_F(TestFieldDataHelper, ParseStringIntoStorageType) {
     _CHECK_PARSE_STRING_SUCC(FLOAT_VECTOR,
                             "1.111000,2.111000,3.111000,4.111000,5.111000",
                             vec);
+    // testing double vector data;                        
+    std::vector<double> dvec = {1.111, 2.111, 3.111, 4.111, 5.111};
+    _CHECK_PARSE_STRING_SUCC(DOUBLE_VECTOR,
+                            "1.111000,2.111000,3.111000,4.111000,5.111000",
+                            dvec);
+    // testing binary vector data;                        
+    std::string orig_binary = "orig_str";
+    std::vector<uint8_t> binary_vector(orig_binary.begin(), orig_binary.end());
+    std::string encoded_binary = ::lgraph_api::base64::Encode(orig_binary);
+    _CHECK_PARSE_STRING_SUCC(BINARY_VECTOR, encoded_binary, binary_vector);
 
 
 #define _CHECK_PARSE_STRING_FAIL(FT, s)                                    \
@@ -258,6 +270,8 @@ TEST_F(TestFieldDataHelper, ParseStringIntoStorageType) {
     _CHECK_PARSE_STRING_FAIL(POLYGON, "asdjasncioo");
     _CHECK_PARSE_STRING_FAIL(SPATIAL, "123@.adsas--=");
     _CHECK_PARSE_STRING_FAIL(FLOAT_VECTOR, "ABCDEFG");
+    _CHECK_PARSE_STRING_FAIL(DOUBLE_VECTOR, "ABCDEFG");
+    _CHECK_PARSE_STRING_FAIL(BINARY_VECTOR, "非法base64编码字符串");
 }
 
 TEST_F(TestFieldDataHelper, FieldDataTypeConvert) {
@@ -441,6 +455,33 @@ TEST_F(TestFieldDataHelper, TryFieldDataToValueOfFieldType) {
         }
         UT_EXPECT_EQ(vec2, vec1);
     } 
+
+    // testing double vector
+    {
+        std::vector<double> vec1 = {1.111, 2.111, 3.111, 4.111, 5.111};
+        FieldData fd1 = FieldData(vec1);
+        Value v1;
+        UT_EXPECT_EQ(TryFieldDataToValueOfFieldType(fd1, FieldType::DOUBLE_VECTOR, v1), true);
+        std::vector<double> vec2 = {};
+        for (size_t i = 0; i < v1.AsType<std::vector<double>>().size(); i++) {
+            vec2.push_back(v1.AsType<std::vector<double>>().at(i));
+        }
+        UT_EXPECT_EQ(vec2, vec1);
+    }
+
+    // testing binary vector
+    {
+        std::string orig_binary = "example binary data";
+        std::vector<uint8_t> vec1(orig_binary.begin(), orig_binary.end());
+        FieldData fd1 = FieldData(vec1);
+        Value v1;
+        UT_EXPECT_EQ(TryFieldDataToValueOfFieldType(fd1, FieldType::BINARY_VECTOR, v1), true);
+        std::vector<uint8_t> vec2 = {};
+        for (size_t i = 0; i < v1.AsType<std::vector<uint8_t>>().size(); i++) {
+            vec2.push_back(v1.AsType<std::vector<uint8_t>>().at(i));
+        }
+        UT_EXPECT_EQ(vec2, vec1);
+    }
 }
 
 TEST_F(TestFieldDataHelper, FieldDataToValueOfFieldType) {
@@ -504,6 +545,14 @@ TEST_F(TestFieldDataHelper, ParseStringToValueOfFieldType) {
     //testing float vector data
     std::vector<float> vec1 = {1.111, 2.111, 3.111, 4.111, 5.111};
     _TEST_PARSE_TO_V_OF_FT(FLOAT_VECTOR, "1.111000, 2.111000, 3.111000, 4.111000, 5.111000", vec1);
+    //testing double vector data
+    std::vector<double> dvec1 = {1.111, 2.111, 3.111, 4.111, 5.111};
+    _TEST_PARSE_TO_V_OF_FT(DOUBLE_VECTOR, "1.111, 2.111, 3.111, 4.111, 5.111", dvec1);
+    //testing binary vector data
+    std::string orig_binary = "example binary data";
+    std::vector<uint8_t> bvec1(orig_binary.begin(), orig_binary.end());
+    std::string encoded_binary = ::lgraph_api::base64::Encode(orig_binary);
+    _TEST_PARSE_TO_V_OF_FT(BINARY_VECTOR, encoded_binary, bvec1);
 
     UT_EXPECT_ANY_THROW(_TEST_PARSE_TO_V_OF_FT(BLOB, "abc", "abc"));
     UT_EXPECT_ANY_THROW(_TEST_PARSE_TO_V_OF_FT(BOOL, "tr", 1));
@@ -525,6 +574,12 @@ TEST_F(TestFieldDataHelper, ParseStringToValueOfFieldType) {
     //testing float vector data
     std::vector<float> vec3 = {1.111, 2.111, 3.111, 4.111, 5.111};
     UT_EXPECT_ANY_THROW(_TEST_PARSE_TO_V_OF_FT(FLOAT_VECTOR, "213234qwe#@asda", vec3));
+    //testing double vector data
+    std::vector<double> dvec3 = {1.111, 2.111, 3.111, 4.111, 5.111};
+    UT_EXPECT_ANY_THROW(_TEST_PARSE_TO_V_OF_FT(DOUBLE_VECTOR, "213234qwe#@asda", dvec3));
+    //testing binary vector data
+    std::vector<uint8_t> bvec3 = {1, 2, 3, 4, 5};
+    UT_EXPECT_ANY_THROW(_TEST_PARSE_TO_V_OF_FT(BINARY_VECTOR, "非法base64编码字符串", bvec3));
 }
 
 TEST_F(TestFieldDataHelper, ValueCompare) {

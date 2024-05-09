@@ -114,6 +114,10 @@ inline pybind11::object FieldDataToPyObj(const FieldData& data) {
         return pybind11::str(*data.data.buf);
     case FieldType::FLOAT_VECTOR:
         return pybind11::cast(data.AsFloatVector());
+    case FieldType::DOUBLE_VECTOR:
+        return pybind11::cast(data.AsDoubleVector());
+    case FieldType::BINARY_VECTOR:
+        return pybind11::cast(data.AsBinaryVector());
     }
     FMA_ASSERT(false);
     return pybind11::none();
@@ -147,7 +151,7 @@ void register_python_api(pybind11::module& m) {
         .def_readwrite("name", &FieldSpec::name, "Name of this field.")
         .def_readwrite("type", &FieldSpec::type,
                        "Type of this field, INT8, INT16, ..., POINT, LINESTRING,"
-                       "POLYGON, SPATIAL, FLOAT_VECTOR")
+                       "POLYGON, SPATIAL, FLOAT_VECTOR, DOUBLE_VECTOR, BINARY_VECTOR")
         .def_readwrite("nullable", &FieldSpec::optional, "Whether this field can be null.")
         .def("__repr__", [](const FieldSpec& a) {
             return fma_common::StringFormatter::Format("(name:{}, type:{}, nullable:{})", a.name,
@@ -310,6 +314,16 @@ void register_python_api(pybind11::module& m) {
                 return FieldData::FloatVector(vec);
             },
             "Make a FLOAT VECTOR value")
+        .def_static(
+            "Double_Vector", [](std::vector<double>& vec) {
+                return FieldData::DoubleVector(vec);
+            },
+            "Make a DOUBLE VECTOR value")
+        .def_static(
+            "Binary_Vector", [](std::vector<uint8_t>& vec) {
+                return FieldData::BinaryVector(vec);
+            },
+            "Make a BINARY VECTOR value")
         .def("AsBool", &FieldData::AsBool, "Get value as bool, throws exception on type mismatch",
              pybind11::call_guard<SignalsGuard>())
         .def("AsInt8", &FieldData::AsInt8, "Get value as int8, throws exception on type mismatch",
@@ -486,6 +500,8 @@ void register_python_api(pybind11::module& m) {
         .value("POLYGON", FieldType::POLYGON)
         .value("SPATIAL", FieldType::SPATIAL)
         .value("FLOAT_VECTOR", FieldType::FLOAT_VECTOR)
+        .value("DOUBLE_VECTOR", FieldType::DOUBLE_VECTOR)
+        .value("BINARY_VECTOR", FieldType::BINARY_VECTOR)
         .export_values();
 
     pybind11::enum_<lgraph_api::AccessLevel>(m, "AccessLevel", pybind11::arithmetic(),

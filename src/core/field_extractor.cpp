@@ -105,6 +105,32 @@ void FieldExtractor::_ParseStringAndSet<FieldType::FLOAT_VECTOR>(Value& record,
         throw ParseStringException(Name(), data, FieldType::FLOAT_VECTOR);                                                        
     return _SetVariableLengthValue(record, Value::ConstRef(vec));
 }
+template <>
+void FieldExtractor::_ParseStringAndSet<FieldType::DOUBLE_VECTOR>(Value& record,
+                                                                 const std::string& data) const {
+    std::vector<double> vec;
+    std::regex pattern("-?[0-9]+\\.?[0-9]*([eE][-+]?[0-9]+)?");
+    std::sregex_iterator begin_it(data.begin(), data.end(), pattern), end_it;
+    while (begin_it != end_it) {
+        std::smatch match = *begin_it;
+        vec.push_back(std::stod(match.str()));
+        ++begin_it;
+    }
+    if (vec.size() <= 0)
+        throw ParseStringException(Name(), data, FieldType::DOUBLE_VECTOR);                                                        
+    return _SetVariableLengthValue(record, Value::ConstRef(vec));
+}
+template <>
+void FieldExtractor::_ParseStringAndSet<FieldType::BINARY_VECTOR>(Value& record,
+                                                                 const std::string& data) const {
+    std::vector<uint8_t> vec;
+    std::string decoded;
+    if (!::lgraph_api::base64::TryDecode(data, decoded)) {
+        throw ParseStringException(Name(), data, FieldType::BINARY_VECTOR);
+    }
+    vec.assign(decoded.begin(), decoded.end());
+    return _SetVariableLengthValue(record, Value::ConstRef(vec));
+}
 /**
  * Parse the string data and set the field
  *
@@ -120,7 +146,8 @@ void FieldExtractor::_ParseStringAndSet<FieldType::FLOAT_VECTOR>(Value& record,
 void FieldExtractor::ParseAndSet(Value& record, const std::string& data) const {
     if (data.empty() && (field_data_helper::IsFixedLengthFieldType(def_.type)
         || def_.type == FieldType::LINESTRING || def_.type == FieldType::POLYGON
-        || def_.type == FieldType::SPATIAL || def_.type == FieldType::FLOAT_VECTOR)) {
+        || def_.type == FieldType::SPATIAL || def_.type == FieldType::FLOAT_VECTOR
+        || def_.type == FieldType::DOUBLE_VECTOR|| def_.type == FieldType::BINARY_VECTOR)) {
         SetIsNull(record, true);
         return;
     }
@@ -161,6 +188,10 @@ void FieldExtractor::ParseAndSet(Value& record, const std::string& data) const {
         return _ParseStringAndSet<FieldType::SPATIAL>(record, data);
     case FieldType::FLOAT_VECTOR:
         return _ParseStringAndSet<FieldType::FLOAT_VECTOR>(record, data);
+    case FieldType::DOUBLE_VECTOR:
+        return _ParseStringAndSet<FieldType::DOUBLE_VECTOR>(record, data);
+    case FieldType::BINARY_VECTOR:
+        return _ParseStringAndSet<FieldType::BINARY_VECTOR>(record, data);
     case FieldType::NUL:
         LOG_ERROR() << "NUL FieldType";
     }
@@ -276,6 +307,20 @@ void FieldExtractor::ParseAndSet(Value& record, const FieldData& data) const {
 
             return _SetVariableLengthValue(record, Value::ConstRef(*data.data.vp));
         }
+    case FieldType::DOUBLE_VECTOR:
+        {
+            if (data.type != FieldType::DOUBLE_VECTOR)
+                throw ParseFieldDataException(Name(), data, Type());
+
+            return _SetVariableLengthValue(record, Value::ConstRef(*data.data.vdp));
+        }
+    case FieldType::BINARY_VECTOR:
+        {
+            if (data.type != FieldType::BINARY_VECTOR)
+                throw ParseFieldDataException(Name(), data, Type());
+
+            return _SetVariableLengthValue(record, Value::ConstRef(*data.data.vb));
+        }
     default:
         LOG_ERROR() << "Data type " << field_data_helper::FieldTypeName(def_.type)
                     << " not handled";
@@ -362,6 +407,27 @@ std::string FieldExtractor::FieldToString(const Value& record) const {
                 vec_str.pop_back();
             }
             return vec_str;
+        }
+    case FieldType::DOUBLE_VECTOR:
+        {
+            std::string vec_str;
+            const auto& vec = record.AsType<std::vector<double>>();
+            for (size_t i = 0; i < vec.size(); i++) {
+                vec_str += std::to_string(vec[i]) + ",";
+            }
+            if (!vec_str.empty()) {
+                vec_str.pop_back();
+            }
+            return vec_str;
+        }
+    case FieldType::BINARY_VECTOR:
+        {
+          std::string base64_str;
+          const auto& binary_data = record.AsType<std::vector<uint8_t>>();
+          if (!binary_data.empty()) {
+              base64_str = ::lgraph_api::base64::Encode(reinterpret_cast<const char*>(binary_data.data()), binary_data.size());
+          }
+          return base64_str;
         }
     case lgraph_api::NUL:
         break;

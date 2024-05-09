@@ -463,6 +463,20 @@ inline web::json::value ValueToJson(const FieldData& fd) {
             }            
             return web::json::value::array(json_vec);
         }
+    case FieldType::DOUBLE_VECTOR:
+        {
+            std::vector<web::json::value> json_vec;
+            for(double num: *fd.data.vdp){
+                json_vec.push_back(web::json::value::number(num));
+            }            
+            return web::json::value::array(json_vec);
+        }
+    case FieldType::BINARY_VECTOR:
+        {
+            std::string encoded = ::lgraph_api::base64::Encode(
+            reinterpret_cast<const char*>(fd.data.vb->data()), fd.data.vb->size());
+            return web::json::value::string(_TU(encoded));
+        }
     }
     FMA_DBG_ASSERT(false);  // unhandled FieldData type
     return web::json::value::null();

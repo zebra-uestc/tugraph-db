@@ -132,6 +132,14 @@ static json FieldDataToJson(const lgraph_api::FieldData& data) {
         {
             return json(data.AsFloatVector());
         }
+    case lgraph_api::FieldType::DOUBLE_VECTOR:
+        {
+            return json(data.AsDoubleVector());
+        }
+    case lgraph_api::FieldType::BINARY_VECTOR:
+        {
+            return json(data.AsBinaryVector());
+        }
     default:
         THROW_CODE(InputError,
             "FieldDataToJson: unsupported field type: {}", data.type);

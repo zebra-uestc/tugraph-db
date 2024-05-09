@@ -319,6 +319,10 @@ KeySortFunc GetKeyComparator(const ComparatorDesc& desc) {
             THROW_CODE(KvException, "Blob fields cannot act as key.");
         case FieldType::FLOAT_VECTOR:
             THROW_CODE(KvException, "Float vector fields cannot act as key.");
+        case FieldType::DOUBLE_VECTOR:
+            THROW_CODE(KvException, "Double vector fields cannot act as key.");
+        case FieldType::BINARY_VECTOR:
+            THROW_CODE(KvException, "Binary vector fields cannot act as key.");
         default:
             THROW_CODE(KvException, "Unknown data type: {}", desc.data_type);
         }

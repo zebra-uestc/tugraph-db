@@ -85,6 +85,8 @@ class OpCreate : public OpBase {
                     case lgraph::FieldType::POLYGON:
                     case lgraph::FieldType::SPATIAL:
                     case lgraph::FieldType::FLOAT_VECTOR:
+                    case lgraph::FieldType::DOUBLE_VECTOR:
+                    case lgraph::FieldType::BINARY_VECTOR:
                         throw std::bad_cast();
                     };
                     vec.emplace_back(num);

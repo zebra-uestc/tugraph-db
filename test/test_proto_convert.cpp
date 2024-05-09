@@ -152,6 +152,8 @@ TEST_F(TestProtoConvert, ProtoConvert) {
         fss.emplace_back("int8", FieldType::POLYGON, false);
         fss.emplace_back("int8", FieldType::SPATIAL, false);
         fss.emplace_back("int8", FieldType::FLOAT_VECTOR, false);
+        fss.emplace_back("int8", FieldType::DOUBLE_VECTOR, false);
+        fss.emplace_back("int8", FieldType::BINARY_VECTOR, false);
         ::google::protobuf::RepeatedPtrField<ProtoFieldSpec> pfss, pfss2;
         FieldSpecConvert::FromLGraphT(fss, &pfss);
         UT_EXPECT_EQ(pfss.size(), fss.size());

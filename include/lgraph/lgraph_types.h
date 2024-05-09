@@ -193,7 +193,9 @@ enum FieldType {
     LINESTRING = 13,  // LineString type of spatial data
     POLYGON = 14,     // Polygon type of spatial data
     SPATIAL = 15,     // spatial data, it's now unused but may be used in the future.
-    FLOAT_VECTOR = 16  // float vector
+    FLOAT_VECTOR = 16,  // float vector
+    DOUBLE_VECTOR = 17, // double vector
+    BINARY_VECTOR = 18  // binary vector
 };
 
 /**
@@ -241,6 +243,10 @@ inline const std::string to_string(FieldType v) {
         return "SPATIAL";
     case FLOAT_VECTOR:
         return "FLOAT_VECTOR";
+    case DOUBLE_VECTOR:
+        return "DOUBLE_VECTOR";
+    case BINARY_VECTOR:
+        return "BINARY_VECTOR";
     default:
         throw std::runtime_error("Unknown Field Type");
     }
@@ -487,6 +493,16 @@ struct FieldData {
         data.vp = new std::vector<float>(fv);
     }
 
+    explicit FieldData(const std::vector<double>& dv) {
+        type = FieldType::DOUBLE_VECTOR;
+        data.vdp = new std::vector<double>(dv);
+    }
+
+    explicit FieldData(const std::vector<uint8_t>& bv) {
+        type = FieldType::BINARY_VECTOR;
+        data.vb = new std::vector<uint8_t>(bv);
+    }
+
     ~FieldData() {
         if (IsBufType(type)) delete data.buf;
     }
@@ -495,11 +511,15 @@ struct FieldData {
         type = rhs.type;
         if (IsBufType(rhs.type)) {
             data.buf = new std::string(*rhs.data.buf);
-        } else if (rhs.type != FieldType::FLOAT_VECTOR) {
+        } else if (rhs.type == FieldType::FLOAT_VECTOR) {
+            data.vp = rhs.data.vp;
+        } else if (rhs.type == FieldType::DOUBLE_VECTOR) {
+            data.vdp = rhs.data.vdp;
+        } else if (rhs.type == FieldType::BINARY_VECTOR) {
+            data.vb = rhs.data.vb;
+        } else {
             // the integer type must have the biggest size, see static_assertion below
             data.int64 = rhs.data.int64;
-        } else {
-            data.vp = rhs.data.vp;
         }
     }
 
@@ -622,7 +642,9 @@ struct FieldData {
     }
 
     static inline FieldData FloatVector(const std::vector<float>& fv) { return FieldData(fv); }
-
+    static inline FieldData DoubleVector(const std::vector<double>& dv) { return FieldData(dv); }
+    static inline FieldData BinaryVector(const std::vector<uint8_t>& bv) { return FieldData(bv); }
+    
     //-------------------------
     // Constructs blobs.
     // A blob is a byte array. It can be used to store binary data such as images, html
@@ -689,6 +711,8 @@ struct FieldData {
         case FieldType::POLYGON:
         case FieldType::SPATIAL:
         case FieldType::FLOAT_VECTOR:
+        case FieldType::DOUBLE_VECTOR:
+        case FieldType::BINARY_VECTOR:
             throw std::bad_cast();
         }
         return 0;
@@ -723,6 +747,8 @@ struct FieldData {
         case FieldType::POLYGON:
         case FieldType::SPATIAL:
         case FieldType::FLOAT_VECTOR:
+        case FieldType::DOUBLE_VECTOR:
+        case FieldType::BINARY_VECTOR:
             throw std::bad_cast();
         }
         return 0.;
@@ -883,6 +909,18 @@ struct FieldData {
         throw std::bad_cast();
     }
 
+    inline std::vector<double> AsDoubleVector() 
+    const {
+        if (type == FieldType::DOUBLE_VECTOR) return *data.vdp;
+        throw std::bad_cast();
+    }
+
+    inline std::vector<uint8_t> AsBinaryVector() 
+    const {
+        if (type == FieldType::BINARY_VECTOR) return *data.vb;
+        throw std::bad_cast();
+    }
+
     std::any ToBolt() const;
 
     /** @brief   Get string representation of this FieldData. */
@@ -927,6 +965,20 @@ struct FieldData {
                 vec_str.pop_back();
                 return vec_str;
             }
+        case FieldType::DOUBLE_VECTOR:
+            {
+                std::string vec_str;
+                for (double num : *data.vdp) {
+                    vec_str += std::to_string(num);
+                    vec_str += ',';
+                }
+                vec_str.pop_back();
+                return vec_str;
+            }
+        case FieldType::BINARY_VECTOR:
+            {
+                return ::lgraph_api::base64::Encode(std::string(data.vb->begin(), data.vb->end()));
+            }
         }
         throw std::runtime_error("Unhandled data type, probably corrupted data.");
         return "";
@@ -945,6 +997,8 @@ struct FieldData {
         if (type == FieldType::NUL && rhs.type == FieldType::NUL) return true;
         if (type == FieldType::NUL || rhs.type == FieldType::NUL) return false;
         if (type == FieldType::FLOAT_VECTOR || rhs.type == FieldType::FLOAT_VECTOR) return false;
+        if (type == FieldType::DOUBLE_VECTOR || rhs.type == FieldType::DOUBLE_VECTOR) return false;
+        if (type == FieldType::BINARY_VECTOR || rhs.type == FieldType::BINARY_VECTOR) return false;
         if (type == rhs.type) {
             switch (type) {
             case FieldType::NUL:
@@ -976,6 +1030,10 @@ struct FieldData {
                 return *data.buf == *rhs.data.buf;
             case FieldType::FLOAT_VECTOR:
                 throw std::runtime_error("Float vector data are not comparable now.");
+            case FieldType::DOUBLE_VECTOR:
+                throw std::runtime_error("Double vector data are not comparable now.");
+            case FieldType::BINARY_VECTOR:
+                throw std::runtime_error("Binary vector data are not comparable now.");
             }
             throw std::runtime_error("Unhandled data type, probably corrupted data.");
         } else if (IsInteger(type) && IsInteger(rhs.type)) {
@@ -999,6 +1057,8 @@ struct FieldData {
         if (type == FieldType::NUL) return false;
         if (rhs.type == FieldType::NUL) return true;
         if (type == FieldType::FLOAT_VECTOR || rhs.type == FieldType::FLOAT_VECTOR) return false;
+        if (type == FieldType::DOUBLE_VECTOR || rhs.type == FieldType::DOUBLE_VECTOR) return false;
+        if (type == FieldType::BINARY_VECTOR || rhs.type == FieldType::BINARY_VECTOR) return false;
         if (type == rhs.type) {
             switch (type) {
             case FieldType::NUL:
@@ -1031,6 +1091,10 @@ struct FieldData {
                 throw std::runtime_error("Spatial data are not comparable now.");
             case FieldType::FLOAT_VECTOR:
                 throw std::runtime_error("Float vector data are not comparable now.");
+            case FieldType::DOUBLE_VECTOR:
+                throw std::runtime_error("Double vector data are not comparable now.");
+            case FieldType::BINARY_VECTOR:
+                throw std::runtime_error("Binary vector data are not comparable now.");
             }
             throw std::runtime_error("Unhandled data type, probably corrupted data.");
         } else if (IsInteger(type) && IsInteger(rhs.type)) {
@@ -1052,6 +1116,8 @@ struct FieldData {
         if (rhs.type == FieldType::NUL) return true;
         if (type == FieldType::NUL) return false;
         if (type == FieldType::FLOAT_VECTOR || rhs.type == FieldType::FLOAT_VECTOR) return false;
+        if (type == FieldType::DOUBLE_VECTOR || rhs.type == FieldType::DOUBLE_VECTOR) return false;
+        if (type == FieldType::BINARY_VECTOR || rhs.type == FieldType::BINARY_VECTOR) return false;
         if (type == rhs.type) {
             switch (type) {
             case FieldType::NUL:
@@ -1084,6 +1150,10 @@ struct FieldData {
                 throw std::runtime_error("Spatial data are not comparable now.");
             case FieldType::FLOAT_VECTOR:
                 throw std::runtime_error("Float vector data are not comparable now.");
+            case FieldType::DOUBLE_VECTOR:
+                throw std::runtime_error("Double vector data are not comparable now.");
+            case FieldType::BINARY_VECTOR:
+                throw std::runtime_error("Binary vector data are not comparable now.");
             }
             throw std::runtime_error("Unhandled data type, probably corrupted data.");
         } else if (IsInteger(type) && IsInteger(rhs.type)) {
@@ -1119,6 +1189,8 @@ struct FieldData {
         double dp;
         std::string* buf;
         std::vector<float>* vp;
+        std::vector<double>* vdp;
+        std::vector<uint8_t>* vb;
     } data;
 
     inline bool is_null() const { return type == FieldType::NUL; }
@@ -1185,10 +1257,16 @@ struct FieldData {
     /** @brief   Query if this object is float vector*/
     bool IsFloatVector() const { return type == FieldType::FLOAT_VECTOR; }
 
+    /** @brief   Query if this object is double vector*/
+    bool IsDoubleVector() const { return type == FieldType::DOUBLE_VECTOR; }
+
+    /** @brief   Query if this object is binary vector*/
+    bool IsBinaryVector() const { return type == FieldType::BINARY_VECTOR; }
+
  private:
     /** @brief   Query if 't' is BLOB or STRING */
     static inline bool IsBufType(FieldType t) {
-        return t >= FieldType::STRING && t < FieldType::FLOAT_VECTOR;
+        return t >= FieldType::STRING && t < FieldType::BINARY_VECTOR;
     }
 
     /** @brief   Query if 't' is INT8, 16, 32, or 64 */

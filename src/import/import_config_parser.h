@@ -48,6 +48,8 @@ enum KeyWord {
     LINESTRING,
     POLYGON,
     FLOAT_VECTOR,
+    DOUBLE_VECTOR,
+    BINARY_VECTOR,
     LABEL,  // VERTEX_LABEL or EDGE_LABEL
     VERTEX_LABEL,
     EDGE_LABEL,
@@ -82,6 +84,8 @@ class KeyWordFunc {
             {KeyWord::LINESTRING, "LINESTRING"},
             {KeyWord::POLYGON, "POLYGON"},
             {KeyWord::FLOAT_VECTOR, "FLOAT_VECTOR"},
+            {KeyWord::DOUBLE_VECTOR, "DOUBLE_VECTOR"},
+            {KeyWord::BINARY_VECTOR, "BINARY_VECTOR"},
             {KeyWord::LABEL, "LABEL"},
             {KeyWord::VERTEX_LABEL, "VERTEX_LABEL"},
             {KeyWord::EDGE_LABEL, "EDGE_LABEL"},

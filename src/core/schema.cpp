@@ -279,6 +279,14 @@ FieldData Schema::GetFieldDataFromField(const _detail::FieldExtractor* extractor
     {
         return FieldData((extractor->GetConstRef(record)).AsType<std::vector<float>>());
     }
+    case FieldType::DOUBLE_VECTOR:
+    {
+        return FieldData((extractor->GetConstRef(record)).AsType<std::vector<double>>());
+    }
+    case FieldType::BINARY_VECTOR:
+    {
+        return FieldData((extractor->GetConstRef(record)).AsType<std::vector<uint8_t>>());
+    }
     case FieldType::NUL:
         LOG_ERROR() << "FieldType NUL";
     }

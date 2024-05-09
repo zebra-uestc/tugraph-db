@@ -171,6 +171,22 @@ struct FieldDataConvert {
                 }     
                 return ret->set_allocated_fvector(point);
             }
+        case FieldType::DOUBLE_VECTOR:
+          {
+                lgraph::doublevector *dvector = new lgraph::doublevector;
+                for (double num : *fd.data.vdp) {
+                    dvector->add_dv(num);
+                }
+                ret->set_allocated_dvector(dvector);
+                break;
+          }
+        case FieldType::BINARY_VECTOR:
+          {
+                lgraph::binaryvector *bvector = new lgraph::binaryvector;
+                bvector->add_bv(std::string(reinterpret_cast<const char*>(&((*fd.data.vb)[0])), fd.data.vb->size()));
+                ret->set_allocated_bvector(bvector);
+                break;
+          }
         }
         FMA_ASSERT(false);
     }
@@ -217,6 +233,22 @@ struct FieldDataConvert {
                 }     
                 return ret->set_allocated_fvector(point);
             }
+        case FieldType::DOUBLE_VECTOR:
+          {
+                lgraph::doublevector *dvector = new lgraph::doublevector;
+                for (double num : *fd.data.vdp) {
+                    dvector->add_dv(num);
+                }
+                ret->set_allocated_dvector(dvector);
+                break;
+          }
+        case FieldType::BINARY_VECTOR:
+          {
+                lgraph::binaryvector *bvector = new lgraph::binaryvector;
+                bvector->add_bv(std::string(reinterpret_cast<const char*>(&((*fd.data.vb)[0])), fd.data.vb->size()));
+                ret->set_allocated_bvector(bvector);
+                break;
+          }
         }
         FMA_ASSERT(false);
     }
