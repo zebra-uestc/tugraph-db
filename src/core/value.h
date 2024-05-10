@@ -118,6 +118,23 @@ struct TypeCast<std::vector<float>> {
         return *floatvectorPtr;
     }
 };
+
+template <>
+struct TypeCast<std::vector<double>> {
+    static std::vector<double> AsType(void* p, size_t s) {
+        size_t numElements = s / sizeof(double);
+        double* doubleArray = reinterpret_cast<double*>(p);
+        return std::vector<double>(doubleArray, doubleArray + numElements);
+    }
+};
+
+template <>
+struct TypeCast<std::vector<uint8_t>> {
+    static std::vector<uint8_t> AsType(void* p, size_t s) {
+        uint8_t* byteArray = reinterpret_cast<uint8_t*>(p);
+        return std::vector<uint8_t>(byteArray, byteArray + s);
+    }
+};
 }  // namespace _detail
 
 /**

@@ -76,6 +76,24 @@ struct FieldDataConvert {
                 }            
                 return FieldData::FloatVector(vec);
             }
+        case ProtoFieldData::kDvector:
+            {
+                std::vector<double> vec;
+                auto size = fd.dvector().dv_size();
+                for(int i = 0; i < size; i++) {
+                    vec.push_back(fd.release_dvector()->dv(i));
+                }
+                return FieldData::DoubleVector(vec);
+            }
+        case ProtoFieldData::kBvector:
+            {
+                const auto& bvector = fd.bvector();
+                std::vector<uint8_t> vec;
+                for (const auto& b : bvector.bv()) {
+                    vec.insert(vec.end(), b.begin(), b.end());
+                }
+                return FieldData::BinaryVector(std::move(vec));
+            }
         }
         FMA_ASSERT(false);
         return FieldData();
@@ -123,6 +141,24 @@ struct FieldDataConvert {
                     vec.push_back(fd.fvector().fv(i));
                 }            
                 return FieldData::FloatVector(vec);
+            }
+        case ProtoFieldData::kDvector:
+            {
+                std::vector<double> vec;
+                auto size = fd.dvector().dv_size();
+                for(int i = 0; i < size; i++) {
+                    vec.push_back(fd.dvector().dv(i));
+                }
+                return FieldData::DoubleVector(vec);
+            }
+        case ProtoFieldData::kBvector:
+            {
+                std::vector<uint8_t> vec;
+                const auto& bvector = fd.bvector();
+                for (const auto& b : bvector.bv()) {
+                    vec.insert(vec.end(), b.begin(), b.end());
+                }
+                return FieldData::BinaryVector(std::move(vec));
             }
         }
         FMA_ASSERT(false);

@@ -380,7 +380,25 @@ web::json::value ProtoFieldDataToJson(const ProtoFieldData& data) {
                 json_vec.push_back(web::json::value::number(data.fvector().fv(i)));
             }            
             return web::json::value::array(json_vec);
-        }    
+        }
+    case ProtoFieldData::kDvector:
+        {
+            std::vector<web::json::value> json_vec;
+            auto size = data.dvector().dv_size();
+            for (int i = 0; i < size; i++) {
+                json_vec.push_back(web::json::value::number(data.dvector().dv(i)));
+            }
+            return web::json::value::array(json_vec);
+        }
+    case ProtoFieldData::kBvector:
+        {
+            const auto& bvector = data.bvector();
+            std::string all_bytes;
+            for (const auto& b : bvector.bv()) {
+                all_bytes.insert(all_bytes.end(), b.begin(), b.end());
+            }
+            return web::json::value::string(_TU(::lgraph_api::base64::Encode(all_bytes)));
+        }
     }
     FMA_ASSERT(false);
     return web::json::value::null();

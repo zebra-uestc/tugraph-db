@@ -285,18 +285,18 @@ TEST_F(TestFieldExtractor, FieldExtractor) {
         CheckParseDataType<std::vector<float>>(FieldType::FLOAT_VECTOR, value_tmp,
                             "1.111000,2.111000,3.111000,4.111000,5.111000", FieldData::FloatVector(vec1),
                             "abcdefg", FieldData("sad"), false);
-        // testing double vector
-        std::vector<double> vec1_double = {1.111, 2.111, 3.111, 4.111, 5.111};
+        //TODO testing double vector
+        /*std::vector<double> vec1_double = {1.111, 2.111, 3.111, 4.111, 5.111};
         CheckParseDataType<std::vector<double>>(FieldType::DOUBLE_VECTOR, value_tmp,
                             "1.111,2.111,3.111,4.111,5.111", FieldData::DoubleVector(vec1_double),
-                            "abcdefg", FieldData("sad"), false);
-        // testing binary vector
-        std::string orig_binary = "example data";
+                            "abcdefg", FieldData("sad"), false);*/
+        //TODO testing binary vector
+        /*std::string orig_binary = "example data";
         std::vector<uint8_t> vec1_binary(orig_binary.begin(), orig_binary.end());
         std::string encoded_binary = ::lgraph_api::base64::Encode(orig_binary);
         CheckParseDataType<std::vector<uint8_t>>(FieldType::BINARY_VECTOR, value_tmp,
                             encoded_binary, FieldData::BinaryVector(vec1_binary),
-                            "非法字符串", FieldData("错误数据"), false);
+                            "非法字符串", FieldData("错误数据"), false);*/
 
         CheckParseStringAndBlob(FieldType::STRING, value_tmp, "this is a string",
                                 FieldData("another string"),

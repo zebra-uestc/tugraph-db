@@ -131,6 +131,24 @@ nlohmann::json ProtoFieldDataToJson(const ProtoFieldData& data) {
             }            
             return vec;
         }
+    case ProtoFieldData::kDvector:
+        {
+            nlohmann::json vec = nlohmann::json::array();
+            auto size = data.dvector().dv_size();
+            for (int i = 0; i < size; i++) {
+                vec.push_back(data.dvector().dv(i));
+            }
+            return vec;
+        }
+    case ProtoFieldData::kBvector:
+        {
+            std::string all_bytes;
+            const auto& bvector = data.bvector();
+            for (const auto& b : bvector.bv()) {
+                all_bytes.insert(all_bytes.end(), b.begin(), b.end());
+            }
+            return nlohmann::json(::lgraph_api::base64::Encode(all_bytes));
+        }
     }
     FMA_ASSERT(false);
     return nlohmann::json();
