@@ -13,7 +13,7 @@ namespace lgraph {
 // IVFFlat index
 class FaissIVFFlatIndex : public VectorIndex {
  private:
-    faiss::IndexFlatL2* quantizer_;
+    faiss::IndexFlat* quantizer_;
     faiss::IndexIVFFlat* index_;
     int nlist_;
 

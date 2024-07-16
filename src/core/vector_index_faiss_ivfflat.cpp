@@ -3,7 +3,7 @@
 namespace lgraph {
 FaissIVFFlatIndex::FaissIVFFlatIndex(const std::string& label, const std::string& name, const std::string& distance_type, int vec_dimension, int nlist)
     : VectorIndex(label, name, distance_type, "IVF_FLAT", vec_dimension, {nlist}), 
-      quantizer_(nullptr), 
+      quantizer_(nullptr),
       index_(nullptr),
       nlist_(nlist) {}
 
@@ -14,11 +14,8 @@ FaissIVFFlatIndex::~FaissIVFFlatIndex() {
 
 // add vector to index and build index
 bool FaissIVFFlatIndex::Add(const std::vector<std::vector<float>>& vectors, size_t num_vectors) {
-    if (!quantizer_) {
-        quantizer_ = new faiss::IndexFlatL2(vec_dimension_);
-    }
-    if (!index_) {
-        index_ = new faiss::IndexIVFFlat(quantizer_, vec_dimension_, nlist_);
+    if (!quantizer_ || !index_) {
+        return false;
     }
     //reduce dimension
     std::vector<float> index_vectors;
@@ -37,12 +34,19 @@ bool FaissIVFFlatIndex::Add(const std::vector<std::vector<float>>& vectors, size
 // build index
 bool FaissIVFFlatIndex::Build() {
     if (!quantizer_) {
-        quantizer_ = new faiss::IndexFlatL2(vec_dimension_);
+        if (distance_type_ == "IVF_L2") {
+            quantizer_ = new faiss::IndexFlatL2(vec_dimension_);
+        } else if (distance_type_ == "IVF_IP") {
+            quantizer_ = new faiss::IndexFlatIP(vec_dimension_);
+        } else {
+            return false;
+        }
     }
     if (!index_) {
         index_ = new faiss::IndexIVFFlat(quantizer_, vec_dimension_, nlist_);
     }
-    return true;
+
+    return true;   
 }
 
 // serialize index
