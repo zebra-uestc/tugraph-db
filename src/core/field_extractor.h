@@ -72,7 +72,7 @@ class FieldExtractor {
         vertex_index_.reset(rhs.vertex_index_ ? new VertexIndex(*rhs.vertex_index_) : nullptr);
         edge_index_.reset(rhs.edge_index_ ? new EdgeIndex(*rhs.edge_index_) : nullptr);
         fulltext_indexed_ = rhs.fulltext_indexed_;
-        vector_index_.reset(rhs.vector_index_ ? new VectorIndex(*rhs.vector_index_) : nullptr);
+        vector_index_ = rhs.vector_index_ ? rhs.vector_index_->Clone() : nullptr;
     }
 
     FieldExtractor& operator=(const FieldExtractor& rhs) {
@@ -86,7 +86,7 @@ class FieldExtractor {
         vertex_index_.reset(rhs.vertex_index_ ? new VertexIndex(*rhs.vertex_index_) : nullptr);
         edge_index_.reset(rhs.edge_index_ ? new EdgeIndex(*rhs.edge_index_) : nullptr);
         fulltext_indexed_ = rhs.fulltext_indexed_;
-        vector_index_.reset(rhs.vector_index_ ? new VectorIndex(*rhs.vector_index_) : nullptr);
+        vector_index_ = rhs.vector_index_ ? rhs.vector_index_->Clone() : nullptr;
         return *this;
     }
 

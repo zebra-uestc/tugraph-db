@@ -110,11 +110,12 @@ IndexManager::IndexManager(KvTransaction& txn, SchemaManager* v_schema_manager,
                 index_spec.push_back(std::stof(match.str()));  
                 ++begin_it; 
             }
-            VectorIndex* vector_index = new VectorIndex(label, field, distance_type, index_type, vec_dimension, index_spec);
+            //VectorIndex* vector_index = new VectorIndex(label, field, distance_type, index_type, vec_dimension, index_spec);
+            auto vector_index = lgraph::VectorIndex::Create(label, field, distance_type, index_type, vec_dimension, index_spec);
             index->SetReady();
             schema->GetFieldExtractor(field)->GetVectorIndex()->GetVectorIndexManager()->MakeVectorIndex();
             schema->MarkVertexIndexed(fe->GetFieldId(), index);
-            schema->MarkVectorIndexed(fe->GetFieldId(), vector_index);
+            schema->MarkVectorIndexed(fe->GetFieldId(), vector_index.get());
         } else {
             LOG_ERROR() << "Unknown index type: " << index_name;
         }
@@ -179,7 +180,7 @@ bool IndexManager::AddVectorIndex(KvTransaction& txn, const std::string& label, 
 
     index.reset(new VertexIndex(nullptr, dt, type));  // no need to creates index table
     
-    vector_index.reset(new VectorIndex(label, field, distance_type, index_type, vec_dimension, index_spec)); 
+    vector_index = lgraph::VectorIndex::Create(label, field, distance_type, index_type, vec_dimension, index_spec);
     return true;
 }
 

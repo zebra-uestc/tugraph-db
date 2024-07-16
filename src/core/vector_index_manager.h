@@ -8,7 +8,7 @@
 #include <string>  
 #include <vector>  
 
-#include "/root/tugraph-db/include/tools/lgraph_log.h"
+#include "../../include/tools/lgraph_log.h"
 
 
 namespace lgraph {
