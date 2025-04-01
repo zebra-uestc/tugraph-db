@@ -31,6 +31,8 @@
 #include "server/state_machine.h"
 #include "server/ha_state_machine.h"
 #include "server/db_management_client.h"
+#include "server/bolt_server.h"
+#include "server/bolt_raft_server.h"
 
 #ifndef _WIN32
 #include "brpc/server.h"
@@ -39,13 +41,27 @@ namespace brpc {
 DECLARE_bool(usercode_in_pthread);
 }
 #endif
+#include <sys/resource.h>
 
 namespace lgraph {
 static Signal _kill_signal_;
 
-void int_handler(int x) {
-    LOG_INFO() << "!!!!! Received signal " << x << ", exiting... !!!!!";
+void shutdown_handler(int sig) {
+    LOG_WARN() << FMA_FMT("Received signal {}, shutdown", std::string(strsignal(sig)));
+    lgraph_log::LoggerManager::GetInstance().FlushAllSinks();
     _kill_signal_.Notify();
+}
+
+void crash_handler(int sig) {
+    LOG_ERROR() << FMA_FMT("Received signal {}, crash", std::string(strsignal(sig)));
+    lgraph_log::LoggerManager::GetInstance().FlushAllSinks();
+
+    struct sigaction sa{};
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sa.sa_handler = SIG_DFL;
+    sigaction(sig, &sa, nullptr);
+    kill(getpid(), sig);
 }
 
 #ifndef _WIN32
@@ -53,17 +69,27 @@ void int_handler(int x) {
 #include <cstdio>
 
 static void SetupSignalHandler() {
-    struct sigaction sa {};
-    sa.sa_handler = int_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    int r = sigaction(SIGINT, &sa, nullptr);
-    if (r != 0) {
-        LOG_ERROR() << "Error setting up SIGINT signal handler: " << strerror(errno);
+    {
+        // shutdown
+        struct sigaction sa{};
+        sa.sa_handler = shutdown_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        sigaction(SIGINT, &sa, nullptr);
+        sigaction(SIGTERM, &sa, nullptr);
+        sigaction(SIGUSR1, &sa, nullptr);
     }
-    r = sigaction(SIGQUIT, &sa, nullptr);
-    if (r != 0) {
-        LOG_ERROR() << "Error setting up SIGQUIT signal handler: " << strerror(errno);
+    {
+        // crash
+        struct sigaction sa{};
+        sa.sa_handler = crash_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_NODEFER;
+        sigaction(SIGSEGV, &sa, nullptr);
+        sigaction(SIGBUS, &sa, nullptr);
+        sigaction(SIGFPE, &sa, nullptr);
+        sigaction(SIGILL, &sa, nullptr);
+        sigaction(SIGABRT, &sa, nullptr);
     }
 }
 
@@ -164,6 +190,17 @@ int LGraphServer::Start() {
                << "Server is configured with the following parameters:\n"
                << config_->FormatAsString();
         LOG_INFO() << header.str();
+        struct rlimit rlim{};
+        getrlimit(RLIMIT_CORE, &rlim);
+        LOG_INFO() << FMA_FMT("Core dump file limit size, soft limit: {}, hard limit: {}",
+                              rlim.rlim_cur, rlim.rlim_max);
+        std::ifstream file("/proc/sys/kernel/core_pattern");
+        if (file.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(file)),
+                                (std::istreambuf_iterator<char>()));
+            LOG_INFO() << "Core dump file path: " << content;
+            file.close();
+        }
 
         // starting audit log
         if (config_->audit_log_dir.empty())
@@ -210,8 +247,13 @@ int LGraphServer::Start() {
 
 #ifndef _WIN32
         // set REST thread limit
-        if (config_->thread_limit != 0)
-            crossplat::threadpool::initialize_with_threads(config_->thread_limit);
+        if (config_->thread_limit != 0) {
+            try {
+                crossplat::threadpool::initialize_with_threads(config_->thread_limit);
+            } catch (const std::exception& e) {
+                LOG_WARN() << "failed to init cpprest threadpool, exception:" << e.what();
+            }
+        }
         rpc_service_ = std::make_unique<RPCService>(state_machine_.get());
         // start RPC service
         if (config_->enable_rpc) {
@@ -241,7 +283,7 @@ int LGraphServer::Start() {
             }
             brpc::ServerOptions brpc_options;
             brpc_options.has_builtin_services = false;
-            if (config_->thread_limit != 0) brpc_options.max_concurrency = config_->thread_limit;
+            // if (config_->thread_limit != 0) brpc_options.max_concurrency = config_->thread_limit;
             // brpc_options.num_threads = brpc_options.max_concurrency = 1;
             if (config_->enable_ssl) {
                 brpc_options.mutable_ssl_options()->default_cert.certificate =
@@ -276,12 +318,47 @@ int LGraphServer::Start() {
         lgraph::RestServer::Config rest_config(*config_);
         rest_server_ = std::make_unique<lgraph::RestServer>(state_machine_.get(),
                                                             rest_config, config_);
-
         if (config_->bolt_port > 0) {
             if (!bolt::BoltServer::Instance().Start(state_machine_.get(),
                                                config_->bolt_port,
                                                     config_->bolt_io_thread_num)) {
                 return -1;
+            }
+            if (config_->bolt_raft_port > 0) {
+                std::string log_path = config_->bolt_raft_logstore_path;
+                if (log_path.empty()) {
+                    log_path = config_->db_dir + "/raftlog";
+                }
+                if (config_->bolt_raft_node_id  == 0) {
+                    LOG_ERROR() << "bolt_raft_node_id should be greater than 0";
+                    return -1;
+                }
+                if (config_->bolt_raft_init_peers.empty()) {
+                    LOG_ERROR() << "bolt_raft_init_peers is empty";
+                    return -1;
+                }
+                bolt_raft::RaftConfig rc;
+                rc.tick_interval = config_->bolt_raft_tick_interval;
+                rc.heartbeat_tick = config_->bolt_raft_heartbeat_tick;
+                rc.election_tick = config_->bolt_raft_election_tick;
+                if (!rc.Check()) {
+                    return -1;
+                }
+                bolt_raft::RaftLogStoreConfig rsc;
+                rsc.path = log_path;
+                rsc.block_cache = config_->bolt_raft_logstore_cache;
+                rsc.total_threads = config_->bolt_raft_logstore_threads;
+                rsc.keep_logs = config_->bolt_raft_logstore_keep_logs;
+                rsc.gc_interval = config_->bolt_raft_logstore_gc_interval;
+                if (!rsc.Check()) {
+                    return -1;
+                }
+                if (!bolt_raft::BoltRaftServer::Instance().Start(
+                        state_machine_.get(), config_->bolt_raft_port,
+                        config_->bolt_raft_node_id, config_->bolt_raft_init_peers,
+                        rsc, rc)) {
+                    return -1;
+                }
             }
         }
 
@@ -356,6 +433,9 @@ int LGraphServer::Stop(bool force_exit) {
         rpc_service_.reset();
         if (config_->bolt_port > 0) {
             bolt::BoltServer::Instance().Stop();
+            if (config_->bolt_raft_port > 0) {
+                bolt_raft::BoltRaftServer::Instance().Stop();
+            }
         }
 #endif
         if (state_machine_) state_machine_->Stop();

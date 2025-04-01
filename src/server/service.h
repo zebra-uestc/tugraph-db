@@ -166,7 +166,7 @@ class Service {
             }
             return 0;
         } else {
-            umask(0);
+            // umask(0);
             int sid = setsid();
             if (sid < 0) {
                 LOG_WARN() << "Failed to create session id: " << strerror(errno);
@@ -213,8 +213,7 @@ class Service {
             LOG_WARN() << "Service " << service_name_ << " is already dead.";
             return NO_PID_FILE;
         }
-        // int r = kill(pid, SIGINT);
-        int r = kill(pid, SIGQUIT);
+        int r = kill(pid, SIGUSR1);
         if (r == EPERM) {
             LOG_WARN() << "Failed to kill service " << service_name_ << ": " << strerror(errno);
             return OTHER_ERROR;

@@ -40,6 +40,7 @@ add_executable(unit_test
         test_embed.cpp
         test_field_data_helper.cpp
         test_field_extractor.cpp
+        test_field_extractor_v2.cpp
         test_fulltext.cpp
         test_galaxy.cpp
         test_global_config.cpp
@@ -134,6 +135,7 @@ add_executable(unit_test
         test_alter_detached_label.cpp
         test_vertex_composite_index.cpp
         test_vsag_index.cpp
+        test_faiss_index.cpp
         ${LGRAPH_ROOT_DIR}/src/client/cpp/rpc/lgraph_rpc_client.cpp
         ${LGRAPH_ROOT_DIR}/src/client/cpp/restful/rest_client.cpp
         ${LGRAPH_ROOT_DIR}/src/import/import_client.cpp
@@ -142,6 +144,8 @@ add_executable(unit_test
 
 target_link_libraries(unit_test
         vsag
+        /opt/OpenBLAS/lib/libopenblas.a
+        faiss
         lgraph_server_lib
         geax_isogql
         bolt

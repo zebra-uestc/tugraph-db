@@ -31,7 +31,9 @@ set(LGRAPH_CORE_SRC
         core/audit_logger.cpp
         core/data_type.cpp
         core/edge_index.cpp
-        core/field_extractor.cpp
+        core/field_extractor_base.cpp
+        core/field_extractor_v1.cpp
+        core/field_extractor_v2.cpp
         core/full_text_index.cpp
         core/global_config.cpp
         core/graph.cpp
@@ -52,6 +54,7 @@ set(LGRAPH_CORE_SRC
         core/transaction.cpp
         core/vertex_index.cpp
         core/vector_index.cpp
+        core/faiss_ivf_flat.cpp
         core/vsag_hnsw.cpp
         core/wal.cpp
         core/lmdb/mdb.c

@@ -173,13 +173,12 @@ class SchemaManager {
      * \exception   ::lgraph::SchemaException   Thrown when a Schema error condition occurs.
      *
      * \param [in,out]  txn         The transaction.
+     * \param           is_vertex   True if this is vertex label, otherwise it is edge label.
      * \param           label       The label.
      * \param           n_fields    The fields.
      * \param           fields      The fields in the labeled data.
-     * \param           primary_field The vertex primary property,
-     *                  must be set when is_vertex is true
-     * \param           edge_constraints The edge constraints, can
-     *                  be set when is_vertex is false
+     * \param           options     Cast to VertexOptions when is_vertex is true, else cast to
+     * EdgeOptions.
      *
      * \return  True if it succeeds, false if the label already exists. Throws exception on error.
      */
@@ -217,6 +216,7 @@ class SchemaManager {
             temporal = dynamic_cast<const EdgeOptions&>(options).temporal_field;
             temporal_order = dynamic_cast<const EdgeOptions&>(options).temporal_field_order;
         }
+        ls->SetFastAlterSchema(options.fast_alter_schema);
         ls->SetSchema(is_vertex, n_fields, fields, primary, temporal, temporal_order,
                       edge_constraints);
         ls->SetLabel(label);
@@ -298,11 +298,11 @@ class SchemaManager {
         return ::lgraph::_detail::UnalignedGet<LabelId>(record.Data());
     }
 
-    const _detail::FieldExtractor* GetExtractor(const Value& record,
+    const _detail::FieldExtractorV1* GetExtractor(const Value& record,
                                                 const std::string& field) const {
         auto ls = GetSchema(record);
         if (!ls) return nullptr;
-        return ls->GetFieldExtractor(field);
+        return ls->GetFieldExtractorV1(ls->GetFieldExtractor(field));
     }
 
     const Schema* GetSchema(const std::string& label) const {

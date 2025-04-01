@@ -29,7 +29,7 @@ struct BrowserOptions {
 
 struct BasicConfigs {
     std::string db_dir = "./lgraph_db";  // db
-    int thread_limit = 0;                // number of threads, for both rpc and http
+    int thread_limit = 2;                // number of threads, for http
     int subprocess_max_idle_seconds = 600;
     // address and ssl
     std::string bind_host = "0.0.0.0";
@@ -84,6 +84,20 @@ struct BasicConfigs {
     // bolt
     int bolt_port = 0;
     int bolt_io_thread_num = 1;
+    // bolt raft
+    int bolt_raft_port = 0;
+    uint64_t bolt_raft_node_id = 0;
+    std::string bolt_raft_init_peers;
+    uint64_t bolt_raft_tick_interval = 100;
+    uint64_t bolt_raft_election_tick = 10;
+    uint64_t bolt_raft_heartbeat_tick = 1;
+
+    std::string bolt_raft_logstore_path;
+    uint64_t bolt_raft_logstore_cache = 1024;
+    uint64_t bolt_raft_logstore_threads = 4;
+    uint64_t bolt_raft_logstore_keep_logs = 0;
+    uint64_t bolt_raft_logstore_gc_interval = 0;
+
     // default disable plugin load/delete
     bool enable_plugin = false;
     BrowserOptions browser_options;

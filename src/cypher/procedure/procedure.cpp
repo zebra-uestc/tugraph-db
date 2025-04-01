@@ -35,6 +35,7 @@
 #include "fma-common/encrypt.h"
 #include "import/import_v3.h"
 #include "server/bolt_session.h"
+#include "server/bolt_raft_server.h"
 
 namespace cypher {
 
@@ -579,7 +580,7 @@ void BuiltinProcedure::DbUpsertVertex(RTContext *ctx, const Record *record,
                 } else {
                     fd = item.second.scalar;
                 }
-                if (fd.IsNull()) {
+                if (fd.IsNull() && !iter->second.second.optional) {
                     success = false;
                     break;
                 }
@@ -910,7 +911,7 @@ void BuiltinProcedure::DbUpsertEdge(RTContext *ctx, const Record *record,
                     } else {
                         fd = item.second.scalar;
                     }
-                    if (fd.IsNull()) {
+                    if (fd.IsNull() && !iter->second.second.optional) {
                         success = false;
                         break;
                     }
@@ -2210,10 +2211,10 @@ void BuiltinProcedure::DbmsGraphGetGraphSchema(RTContext *ctx, const Record *rec
         node["detach_property"] = s->DetachProperty();
         for (auto& fd : s->GetFields()) {
             nlohmann::json property;
-            property["name"] = fd.Name();
-            property["type"] = lgraph_api::to_string(fd.Type());
-            property["optional"] = fd.IsOptional();
-            auto vi = fd.GetVertexIndex();
+            property["name"] = fd->Name();
+            property["type"] = lgraph_api::to_string(fd->Type());
+            property["optional"] = fd->IsOptional();
+            auto vi = fd->GetVertexIndex();
             if (vi) {
                 property["index"] = true;
                 property["unique"] = vi->IsUnique();
@@ -2234,13 +2235,14 @@ void BuiltinProcedure::DbmsGraphGetGraphSchema(RTContext *ctx, const Record *rec
         }
         for (auto& fd : s->GetFields()) {
             nlohmann::json property;
-            property["name"] = fd.Name();
-            property["type"] = lgraph_api::to_string(fd.Type());
-            property["optional"] = fd.IsOptional();
-            auto vi = fd.GetEdgeIndex();
+            property["name"] = fd->Name();
+            property["type"] = lgraph_api::to_string(fd->Type());
+            property["optional"] = fd->IsOptional();
+            auto vi = fd->GetEdgeIndex();
             if (vi) {
                 property["index"] = true;
                 property["unique"] = vi->IsUnique();
+                property["pair_unique"] = vi->IsPairUnique();
             }
             edge["properties"].push_back(property);
         }
@@ -3415,6 +3417,146 @@ void BuiltinProcedure::DbmsHaClusterInfo(RTContext *ctx, const Record *record,
     FillProcedureYieldItem("dbms.ha.clusterInfo", yield_items, records);
 }
 
+void BuiltinProcedure::DbBoltListRaftNodes(RTContext *ctx, const Record *record,
+                                           const VEC_EXPR &args, const VEC_STR &yield_items,
+                                           std::vector<Record> *records) {
+    if (!bolt_raft::BoltRaftServer::Instance().Started()) {
+        THROW_CODE(BoltRaftError, "bolt raft is not enabled");
+        return;
+    }
+    CheckProcedureYieldItem("db.bolt.listRaftNodes", yield_items);
+    CYPHER_ARG_CHECK(args.empty(), FMA_FMT("Function requires 0 arguments, but {} are "
+                                           "given. Usage: db.bolt.listRaftPeers()",
+                                           args.size()))
+    auto infos = bolt_raft::BoltRaftServer::Instance().raft_driver().GetNodeInfosWithLeader();
+    for (auto& [_, node] : infos.nodes()) {
+        Record r;
+        r.AddConstant(lgraph::FieldData::Int64(node.node_id()));
+        r.AddConstant(lgraph::FieldData::String(node.ip()));
+        r.AddConstant(lgraph::FieldData::Int64(node.bolt_port()));
+        r.AddConstant(lgraph::FieldData::Int64(node.bolt_raft_port()));
+        r.AddConstant(lgraph::FieldData::Bool(node.is_leader()));
+        r.AddConstant(lgraph::FieldData::Bool(node.is_learner()));
+        records->emplace_back(r.Snapshot());
+    }
+    FillProcedureYieldItem("db.bolt.listRaftNodes", yield_items, records);
+}
+
+void BuiltinProcedure::DbBoltAddRaftNode(RTContext *ctx, const Record *record,
+                                         const VEC_EXPR &args, const VEC_STR &yield_items,
+                                         std::vector<Record> *records) {
+    if (!bolt_raft::BoltRaftServer::Instance().Started()) {
+        THROW_CODE(BoltRaftError, "bolt raft is not enabled");
+        return;
+    }
+    CheckProcedureYieldItem("db.bolt.addRaftNode", yield_items);
+    CYPHER_ARG_CHECK(args.size() == 4, FMA_FMT("Function requires 4 arguments, but {} are given",
+                                           args.size()))
+    CYPHER_ARG_CHECK(args[0].IsInteger(), "node_id type should be Integer")
+    CYPHER_ARG_CHECK(args[1].IsString(), "ip type should be String")
+    CYPHER_ARG_CHECK(args[2].IsInteger(), "bolt_port type should be Integer")
+    CYPHER_ARG_CHECK(args[3].IsInteger(), "bolt_raft_port type should be Integer")
+    bolt_raft::NodeInfo node;
+    node.set_is_leader(false);
+    node.set_is_learner(false);
+    node.set_node_id(args[0].constant.scalar.AsInt64());
+    node.set_ip(args[1].constant.scalar.AsString());
+    node.set_bolt_port(args[2].constant.scalar.AsInt64());
+    node.set_bolt_raft_port(args[3].constant.scalar.AsInt64());
+    raftpb::ConfChange cc;
+    cc.set_type(raftpb::ConfChangeType::ConfChangeAddNode);
+    cc.set_node_id(node.node_id());
+    cc.set_context(node.SerializeAsString());
+    auto promise = bolt_raft::BoltRaftServer::Instance().raft_driver().ProposeConfChange(cc);
+    auto err = promise->proposed.get_future().get();
+    if (err != nullptr) {
+        THROW_CODE(BoltRaftError, err.String());
+    }
+    promise->applied.get_future().get();
+    FillProcedureYieldItem("db.bolt.addRaftNode", yield_items, records);
+}
+
+void BuiltinProcedure::DbBoltAddRaftLearnerNode(RTContext *ctx, const Record *record,
+                                                const VEC_EXPR &args, const VEC_STR &yield_items,
+                                                std::vector<Record> *records) {
+    if (!bolt_raft::BoltRaftServer::Instance().Started()) {
+        THROW_CODE(BoltRaftError, "bolt raft is not enabled");
+        return;
+    }
+    CheckProcedureYieldItem("db.bolt.addRaftLearnerNode", yield_items);
+    CYPHER_ARG_CHECK(args.size() == 4, FMA_FMT("Function requires 4 arguments, but {} are given",
+                                               args.size()))
+    CYPHER_ARG_CHECK(args[0].IsInteger(), "node_id type should be Integer")
+    CYPHER_ARG_CHECK(args[1].IsString(), "ip type should be String")
+    CYPHER_ARG_CHECK(args[2].IsInteger(), "bolt_port type should be Integer")
+    CYPHER_ARG_CHECK(args[3].IsInteger(), "bolt_raft_port type should be Integer")
+    bolt_raft::NodeInfo node;
+    node.set_is_leader(false);
+    node.set_is_learner(true);
+    node.set_node_id(args[0].constant.scalar.AsInt64());
+    node.set_ip(args[1].constant.scalar.AsString());
+    node.set_bolt_port(args[2].constant.scalar.AsInt64());
+    node.set_bolt_raft_port(args[3].constant.scalar.AsInt64());
+    raftpb::ConfChange cc;
+    cc.set_type(raftpb::ConfChangeType::ConfChangeAddLearnerNode);
+    cc.set_node_id(node.node_id());
+    cc.set_context(node.SerializeAsString());
+    auto promise = bolt_raft::BoltRaftServer::Instance().raft_driver().ProposeConfChange(cc);
+    auto err = promise->proposed.get_future().get();
+    if (err != nullptr) {
+        THROW_CODE(BoltRaftError, err.String());
+    }
+    promise->applied.get_future().get();
+    FillProcedureYieldItem("db.bolt.addRaftLearnerNode", yield_items, records);
+}
+
+void BuiltinProcedure::DbBoltRemoveRaftNode(RTContext *ctx, const Record *record,
+                                            const VEC_EXPR &args, const VEC_STR &yield_items,
+                                            std::vector<Record> *records) {
+    if (!bolt_raft::BoltRaftServer::Instance().Started()) {
+        THROW_CODE(BoltRaftError, "bolt raft is not enabled");
+        return;
+    }
+    CheckProcedureYieldItem("db.bolt.removeRaftNode", yield_items);
+    CYPHER_ARG_CHECK(args.size() == 1, FMA_FMT("Function requires 4 arguments, but {} are given",
+                                               args.size()))
+    CYPHER_ARG_CHECK(args[0].IsInteger(), "node_id type should be Integer")
+    bolt_raft::NodeInfo node;
+    node.set_is_leader(false);
+    node.set_node_id(args[0].constant.scalar.AsInt64());
+    raftpb::ConfChange cc;
+    cc.set_node_id(node.node_id());
+    cc.set_type(raftpb::ConfChangeType::ConfChangeRemoveNode);
+    cc.set_context(node.SerializeAsString());
+    auto promise = bolt_raft::BoltRaftServer::Instance().raft_driver().ProposeConfChange(cc);
+    auto err = promise->proposed.get_future().get();
+    if (err != nullptr) {
+        THROW_CODE(BoltRaftError, err.String());
+    }
+    promise->applied.get_future().get();
+    FillProcedureYieldItem("db.bolt.removeRaftNode", yield_items, records);
+}
+
+void BuiltinProcedure::DbBoltGetRaftStatus(RTContext *ctx, const Record *record,
+                                           const VEC_EXPR &args, const VEC_STR &yield_items,
+                                           std::vector<Record> *records) {
+    if (!bolt_raft::BoltRaftServer::Instance().Started()) {
+        THROW_CODE(BoltRaftError, "bolt raft is not enabled");
+        return;
+    }
+    CheckProcedureYieldItem("db.bolt.getRaftStatus", yield_items);
+    CYPHER_ARG_CHECK(args.empty(), FMA_FMT("Function requires 0 arguments, but {} are given",
+                                               args.size()))
+    auto status = bolt_raft::BoltRaftServer::Instance().raft_driver().GetRaftStatus();
+    nlohmann::json obj = nlohmann::json::parse(status.s.String());
+    obj["raftlog"]["first"] = status.first_log;
+    obj["raftlog"]["last"] = status.last_log;
+    Record r;
+    r.AddConstant(lgraph::FieldData::String(obj.dump(4)));
+    records->emplace_back(r.Snapshot());
+    FillProcedureYieldItem("db.bolt.getRaftStatus", yield_items, records);
+}
+
 static void _FetchPath(lgraph::Transaction &txn, size_t hops,
                        std::unordered_map<lgraph::VertexId, lgraph::VertexId> &parent,
                        std::unordered_map<lgraph::VertexId, lgraph::VertexId> &child,
@@ -4176,8 +4318,8 @@ void VectorFunc::AddVertexVectorIndex(RTContext *ctx, const cypher::Record *reco
     if (parameter.count("index_type")) {
         index_type = parameter.at("index_type").AsString();
     }
-    CYPHER_ARG_CHECK((index_type == "hnsw"),
-                     "Index type should be one of them : hnsw");
+    CYPHER_ARG_CHECK((index_type == "hnsw" || index_type == "ivf_flat"),
+                     "Index type should be one of them : hnsw, ivf_flat");
     int dimension = 128;
     if (parameter.count("dimension")) {
         dimension = (int)parameter.at("dimension").AsInt64();
@@ -4188,19 +4330,32 @@ void VectorFunc::AddVertexVectorIndex(RTContext *ctx, const cypher::Record *reco
     }
     CYPHER_ARG_CHECK((distance_type == "l2" || distance_type == "ip"),
                      "Distance type should be one of them : l2, ip");
-    int hnsm_m = 16;
-    if (parameter.count("hnsm_m")) {
-        hnsm_m = (int)parameter.at("hnsm_m").AsInt64();
+    std::vector<int> index_spec;
+    if (index_type == "hnsw") {
+        int hnsw_m = 16;
+        if (parameter.count("hnsw_m")) {
+            hnsw_m = (int)parameter.at("hnsw_m").AsInt64();
+        }
+        CYPHER_ARG_CHECK((hnsw_m <= 64 && hnsw_m >= 5),
+                     "hnsw.m should be an integer in the range [5, 64]");
+        int hnsw_ef_construction = 100;
+        if (parameter.count("hnsw_ef_construction")) {
+            hnsw_ef_construction = (int)parameter.at("hnsw_ef_construction").AsInt64();
+        }
+        CYPHER_ARG_CHECK((hnsw_ef_construction <= 1000 && hnsw_ef_construction >= hnsw_m),
+                     "hnsw.efConstruction should be an integer in the range [hnsw.m,1000]");
+        index_spec = {hnsw_m, hnsw_ef_construction};
+    } else if (index_type == "ivf_flat") {
+        int ivf_flat_nlist = 1;
+        if (parameter.count("ivf_flat_nlist")) {
+            ivf_flat_nlist = (int)parameter.at("ivf_flat_nlist").AsInt64();
+        }
+        CYPHER_ARG_CHECK((ivf_flat_nlist <= 65536 && ivf_flat_nlist >= 1),
+                     "ivf_flat.nlist should be an integer in the range [1, 65536]");
+        index_spec = {ivf_flat_nlist};
+    } else {
+        throw lgraph::ReminderException("only support ivf_flat & hnsw now");
     }
-    CYPHER_ARG_CHECK((hnsm_m <= 64 && hnsm_m >= 5),
-                     "hnsm.m should be an integer in the range [5, 64]");
-    int hnsm_ef_construction = 100;
-    if (parameter.count("hnsm_ef_construction")) {
-        hnsm_ef_construction = (int)parameter.at("hnsm_ef_construction").AsInt64();
-    }
-    CYPHER_ARG_CHECK((hnsm_ef_construction <= 1000 && hnsm_ef_construction >= hnsm_m),
-                     "hnsm.efConstruction should be an integer in the range [hnsm.m,1000]");
-    std::vector<int> index_spec = {hnsm_m, hnsm_ef_construction};
     auto ac_db = ctx->galaxy_->OpenGraph(ctx->user_, ctx->graph_);
     bool success = ac_db.AddVectorIndex(true, label, field, index_type,
                                         dimension, distance_type, index_spec);
@@ -4251,8 +4406,20 @@ void VectorFunc::ShowVertexVectorIndex(RTContext *ctx, const cypher::Record *rec
         r.AddConstant(lgraph::FieldData(item.index_type));
         r.AddConstant(lgraph::FieldData(item.dimension));
         r.AddConstant(lgraph::FieldData(item.distance_type));
-        r.AddConstant(lgraph::FieldData(item.hnsm_m));
-        r.AddConstant(lgraph::FieldData(item.hnsm_ef_construction));
+        web::json::value js;
+        if (item.index_type == "ivf_flat") {
+            js[_TU("ivf_flat.nlist")] = lgraph::ValueToJson(item.ivf_flat_nlist);
+        } else if (item.index_type == "hnsw") {
+            js[_TU("hnsw.m")] = lgraph::ValueToJson(item.hnsw_m);
+            js[_TU("hnsw.ef_construction")] = lgraph::ValueToJson(item.hnsw_ef_construction);
+        } else {
+            throw lgraph::IndexNotExistException(item.label, item.field);
+        }
+        r.AddConstant(lgraph::FieldData(js.serialize()));
+        auto index = ctx->txn_->GetTxn()->GetVertexVectorIndex(item.label, item.field);
+        r.AddConstant(lgraph::FieldData(index->GetElementsNum()));
+        r.AddConstant(lgraph::FieldData(index->GetMemoryUsage()));
+        r.AddConstant(lgraph::FieldData(index->GetDeletedIdsNum()));
         records->emplace_back(r.Snapshot());
     }
     FillProcedureYieldItem("db.showVertexVectorIndex", yield_items, records);
@@ -4303,13 +4470,25 @@ void VectorFunc::VertexVectorKnnSearch(RTContext *ctx, const cypher::Record *rec
         top_k = parameter.at("top_k").AsInt64();
     }
     CYPHER_ARG_CHECK((top_k >= 1), "top_k must be greater than 0");
-    int ef_search = 200;
-    if (parameter.count("hnsw_ef_search")) {
-        ef_search = parameter.at("hnsw_ef_search").AsInt64();
-    }
-    CYPHER_ARG_CHECK((ef_search <= 1000 && ef_search >= 1),
+    int parameter_search = 0;
+    if (index->GetIndexType() == "hnsw") {
+        parameter_search = 200;
+        if (parameter.count("hnsw_ef_search")) {
+            parameter_search = parameter.at("hnsw_ef_search").AsInt64();
+        }
+        CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
                      "hnsw.ef_search should be an integer in the range [1, 1000]");
-    auto res = index->KnnSearch(query_vector, top_k, ef_search);
+    } else if (index->GetIndexType() == "ivf_flat") {
+        parameter_search = 1;
+        if (parameter.count("ivf_flat_nprobe")) {
+            parameter_search = parameter.at("ivf_flat_nprobe").AsInt64();
+        }
+        CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
+            "ivf_flat.nprobe should be an integer in the range [1, ivf_flat.nlist]");
+    } else {
+        throw lgraph::IndexNotExistException(label, field);
+    }
+    auto res = index->KnnSearch(query_vector, top_k, parameter_search);
     for (auto& item : res) {
         Record r;
         cypher::Node n;
@@ -4359,7 +4538,6 @@ void VectorFunc::VertexVectorRangeSearch(RTContext *ctx, const cypher::Record *r
     auto label = args[0].constant.AsString();
     auto field = args[1].constant.AsString();
     auto index = ctx->txn_->GetTxn()->GetVertexVectorIndex(label, field);
-
     float radius = 0.1;
     auto parameter = *args[3].constant.map;
     if (parameter.count("radius")) {
@@ -4374,18 +4552,30 @@ void VectorFunc::VertexVectorRangeSearch(RTContext *ctx, const cypher::Record *r
         throw lgraph::ReminderException("radius is required for vector range search");
     }
     CYPHER_ARG_CHECK((radius > 0), "radius must be greater than 0");
-    int ef_search = 200;
-    if (parameter.count("hnsw_ef_search")) {
-        ef_search = parameter.at("hnsw_ef_search").AsInt64();
-    }
-    CYPHER_ARG_CHECK((ef_search <= 1000 && ef_search >= 1),
+    int parameter_search = 0;
+    if (index->GetIndexType() == "hnsw") {
+        parameter_search = 200;
+        if (parameter.count("hnsw_ef_search")) {
+            parameter_search = parameter.at("hnsw_ef_search").AsInt64();
+        }
+        CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
                      "hnsw.ef_search should be an integer in the range [1, 1000]");
+    } else if (index->GetIndexType() == "ivf_flat") {
+        parameter_search = 8;
+        if (parameter.count("ivf_flat_nprobe")) {
+            parameter_search = parameter.at("ivf_flat_nprobe").AsInt64();
+        }
+        CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
+            "ivf_flat.nprobe should be an integer in the range [1, ivf_flat.nlist]");
+    } else {
+        throw lgraph::IndexNotExistException(label, field);
+    }
     int limit = -1;
     if (parameter.count("limit")) {
         limit = parameter.at("limit").AsInt64();
     }
     CYPHER_ARG_CHECK((limit != 0), "limit must not be 0");
-    auto res = index->RangeSearch(query_vector, radius, ef_search, limit);
+    auto res = index->RangeSearch(query_vector, radius, parameter_search, limit);
     for (auto& item : res) {
         Record r;
         cypher::Node n;

@@ -1,5 +1,41 @@
 # Change Log for TuGraph
 
+# 4.5.2 (2025-03-13)
+
+**Breaking Changes:**
+
+1. Add bolt cluster (#847)(#853)(#873)(#867)
+
+**Improvements And Bug Fixes:**
+
+1. Documentation bug fixes and optimization (#753)(#798)(#823)(#830)(#852)(#859)(#868)
+2. Compile plugin so with static libstdc++ and libgcc (#821)
+3. Add centos9 compile dockerfile (#808)
+4. Fix some algorithm result errors (#834)(#870)
+5. Initial support for fast schema alteration (#666)
+6. Update tugraph-db-browser (#860)
+7. lgraph_cli: add failed command to history (#877)
+
+# 4.5.1 (2024-12-03)
+
+**Breaking Changes:**
+
+1. Initially support vector index feature
+
+**Improvements And Bug Fixes:**
+
+1. modify exists execution plan (#670)
+2. Fix lgraph_cli hang after a error query (#692)
+3. Capture more system signals (#705)
+4. Add core dump path (#698)
+5. Add missing pair_unique in output of dbms.graph.getGraphSchema() (#707)
+6. Fix bolt coredump (#718)
+7. support node by label range scan (#722)
+8. Skip empty value when adding index (#761)
+9. add some string handling functions (#785)
+10. Add time print for lgraph_cli (#787)
+11. add ReplaceNodeScanWithIndexSeek optimization rule (#801)
+
 # 4.5.0 (2024-09-05)
 
 **Breaking Changes:**

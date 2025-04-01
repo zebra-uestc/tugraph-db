@@ -57,7 +57,7 @@ RUN wget https://tugraph-web.oss-cn-beijing.aliyuncs.com/tugraph/deps/Python-3.6
     && tar xf Python-3.6.9.tgz && cd Python-3.6.9 && ./configure --prefix=/usr/local \
     && make -j16 && make install \
     && python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn \
-    && python3 -m pip install pexpect requests pytest httpx cython==3.0.0a11 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn \
+    && python3 -m pip install pexpect requests pytest httpx cython==3.0.0a11 smart-open==6.4.0 gensim -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn \
     && rm -rf /Python*
 
 # install cmake
@@ -237,8 +237,8 @@ RUN sed -i '3 s/-lgomp/-l:libgomp.a/' /usr/local/lib64/libgomp.spec
 # RUN sed -i '3 s/-lgomp/-l:libgomp.a/'  /usr/lib/gcc/x86_64-linux-gnu/7/libgomp.spec
 
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/jre \
-    LD_LIBRARY_PATH=/usr/local/lgraph/lib64:/usr/local/lib64:/usr/local/lib:/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/amd64/:$LD_LIBRARY_PATH \
-    PYTHONPATH=/usr/local/lgraph/lib64:/usr/local/lib64:$PYTHONPATH \
+    LD_LIBRARY_PATH=/usr/local/lib64/lgraph:/usr/local/lib64:/usr/local/lib:/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/amd64/:$LD_LIBRARY_PATH \
+    PYTHONPATH=/usr/local/lib64/lgraph:/usr/local/lib64:$PYTHONPATH \
     PATH=/opt/apache-maven-3.8.7/bin:/usr/lib/jvm/java-8-openjdk-amd64/jre/bin:$PATH
 
 

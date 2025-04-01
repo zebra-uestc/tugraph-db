@@ -81,6 +81,7 @@ class Transaction {
     std::vector<IteratorBase*> iterators_;
     FullTextIndex* fulltext_index_;
     std::vector<FTIndexEntry> fulltext_buffers_;
+    std::vector<VectorIndexEntry> vector_buffers_;
     std::unordered_map<LabelId, int64_t> vertex_delta_count_;
     std::unordered_map<LabelId, int64_t> edge_delta_count_;
     std::set<LabelId> vertex_label_delete_;
@@ -496,7 +497,7 @@ class Transaction {
         if (!schema)
             THROW_CODE(InputError, "{} Label \"{}\" does not exist.",
                                   is_vertex ? "vertex" : "edge", label);
-        return schema->GetFieldSpecs();
+        return schema->GetAliveFieldSpecs();
     }
 
     std::map<std::string, FieldSpec> GetSchemaAsMap(bool is_vertex, const std::string& label) {
@@ -505,7 +506,7 @@ class Transaction {
         Schema* schema = sm.GetSchema(label);
         if (!schema)
             THROW_CODE(InputError, "Label \"{}\" does not exist.", label);
-        return schema->GetFieldSpecsAsMap();
+        return schema->GetAliveFieldSpecsAsMap();
     }
 
     const std::string& GetVertexPrimaryField(const std::string& label) {

@@ -515,6 +515,9 @@ class OlapOnDB : public OlapBase<EdgeData> {
                     for (size_t vi = partition_begin; vi < partition_end; vi++) {
                         if (vi % 64 == 0 && ShouldKillThisTask(task_ctx)) break;
                         vit.Goto(vi);
+                        if (!vit.IsValid() || vit.GetNumOutEdges() == 0) {
+                            continue;
+                        }
                         for (auto eit = vit.GetOutEdgeIterator(); eit.IsValid(); eit.Next()) {
                             size_t dst = eit.GetDst();
                             EdgeData edata;
@@ -977,12 +980,13 @@ class OlapOnDB : public OlapBase<EdgeData> {
         if (txn.GetNumVertices() == 0) {
             throw std::runtime_error("The graph cannot be empty");
         }
-        if (vertex_filter != nullptr) {
-            flags_ |= SNAPSHOT_IDMAPPING;
-        }
+//        if (vertex_filter != nullptr) {
+//            flags_ |= SNAPSHOT_IDMAPPING;
+//        }
+        flags_ |= SNAPSHOT_IDMAPPING;
         Init(txn.GetNumVertices());
 
-        if (flags_ & SNAPSHOT_IDMAPPING) {
+        /*if (flags_ & SNAPSHOT_IDMAPPING) {
             Construct();
         } else {
             if ((out_edge_filter == nullptr) && (flags_ & SNAPSHOT_PARALLEL) && txn_.IsReadOnly()) {
@@ -990,7 +994,8 @@ class OlapOnDB : public OlapBase<EdgeData> {
             } else {
                 ConstructWithVid();
             }
-        }
+        }*/
+        Construct();
     }
 
     /**
@@ -1525,18 +1530,21 @@ class OlapOnDB : public OlapBase<EdgeData> {
             if (output_filter != nullptr && !output_filter(i, vertex_data[i])) {
                 continue;
             }
-            auto vit = txn_.GetVertexIterator(OriginalVid(i));
-            auto vit_label = vit.GetLabel();
-            auto primary_field = txn_.GetVertexPrimaryField(vit_label);
-            auto field_data = vit.GetField(primary_field);
-            json curJson;
-            curJson["vid"] = OriginalVid(i);
-            curJson["label"] = vit_label;
-            curJson["primary_field"] = primary_field;
-            curJson["field_data"] = field_data.ToString();
-            curJson["result"] = vertex_data[i];
-            auto content = curJson.dump() + "\n";
-            fout.Write(content.c_str(), content.size());
+            auto vit = txn_.GetVertexIterator();
+            vit.Goto(OriginalVid(i));
+            if (vit.IsValid()) {
+                auto vit_label = vit.GetLabel();
+                auto primary_field = txn_.GetVertexPrimaryField(vit_label);
+                auto field_data = vit.GetField(primary_field);
+                json curJson;
+                curJson["vid"] = OriginalVid(i);
+                curJson["label"] = vit_label;
+                curJson["primary_field"] = primary_field;
+                curJson["field_data"] = field_data.ToString();
+                curJson["result"] = vertex_data[i];
+                auto content = curJson.dump() + "\n";
+                fout.Write(content.c_str(), content.size());
+            }
         }
     }
 

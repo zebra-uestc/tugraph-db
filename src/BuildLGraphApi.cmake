@@ -27,7 +27,9 @@ set(LGRAPH_CORE_SRC
         core/audit_logger.cpp
         core/data_type.cpp
         core/edge_index.cpp
-        core/field_extractor.cpp
+        core/field_extractor_base.cpp
+        core/field_extractor_v1.cpp
+        core/field_extractor_v2.cpp
         core/full_text_index.cpp
         core/global_config.cpp
         core/graph.cpp
@@ -49,6 +51,7 @@ set(LGRAPH_CORE_SRC
         core/transaction.cpp
         core/vertex_index.cpp
         core/vector_index.cpp
+        core/faiss_ivf_flat.cpp
         core/vsag_hnsw.cpp
         core/wal.cpp
         core/lmdb/mdb.c
@@ -108,8 +111,6 @@ target_include_directories(${TARGET_LGRAPH} PUBLIC
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(${TARGET_LGRAPH} PUBLIC
             vsag
-            /opt/OpenBLAS/lib/libopenblas.a
-            libfaiss_avx2.a
             libgomp.a
             -static-libstdc++
             -static-libgcc
@@ -124,13 +125,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             pthread
             rt
             z
+            /opt/OpenBLAS/lib/libopenblas.a
+            faiss
             )
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         target_link_libraries(${TARGET_LGRAPH} PUBLIC
                 vsag
                 /opt/OpenBLAS/lib/libopenblas.a
-                libfaiss_avx2.a
+                faiss
                 ${Boost_LIBRARIES}
                 omp
                 pthread
@@ -141,7 +144,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_link_libraries(${TARGET_LGRAPH} PUBLIC
                 vsag
                 /opt/OpenBLAS/lib/libopenblas.a
-                libfaiss_avx2.a
+                faiss
                 rt
                 omp
                 pthread
