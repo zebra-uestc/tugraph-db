@@ -374,7 +374,7 @@ RUN wget https://tugraph-web.oss-cn-beijing.aliyuncs.com/tugraph/deps/tabulate-3
     && rm -rf /tabulate*
 
 # install vsag
-RUN wget https://tugraph-web.oss-cn-beijing.aliyuncs.com/tugraph/deps/vsag-0.14.3.tar.gz -O /tmp/vsag.tar.gz && \
+RUN wget https://vsagcache.oss-rg-china-mainland.aliyuncs.com/vsag/v0.14.4.tar.gz -O /tmp/vsag.tar.gz && \
     cd /tmp && mkdir vsag && tar -xzf vsag.tar.gz --strip-components=1 -C vsag && cd vsag && \
     chmod +x /tmp/vsag/scripts/depsinstall_deps_centos.sh && ./tmp/vsag/scripts/depsinstall_deps_centos.sh && \
     yum install -y libgfortran5.aarch64 && ln -s /usr/lib64/libgfortran.so.5.0.0 /usr/local/lib/libgfortran.so && ldconfig && \
