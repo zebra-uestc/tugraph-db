@@ -20,6 +20,7 @@
 #include "core/transaction.h"
 #include "core/faiss_ivf_flat.h"
 #include "core/vsag_hnsw.h"
+#include "core/vsag_ivf_flat.h"
 
 namespace lgraph {
 IndexManager::IndexManager(KvTransaction& txn, SchemaManager* v_schema_manager,

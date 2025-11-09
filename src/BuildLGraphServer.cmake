@@ -83,7 +83,10 @@ if (NOT (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
             bolt
             -laio
             /usr/local/lib64/libvsag_static.a
-            /usr/local/lib64/libvsag_mockimpl.a
+            libio.a
+            libantlr4-autogen.a
+            libantlr4-runtime.a
+            /usr/local/lib64/libfmt.a
             libdiskann.a
             libcpuinfo.a
             libsimd.a
@@ -150,7 +153,10 @@ target_link_libraries(${TARGET_SERVER}
         librocksdb.a
         -laio
         /usr/local/lib64/libvsag_static.a
-        /usr/local/lib64/libvsag_mockimpl.a
+        libio.a
+        libantlr4-autogen.a
+        libantlr4-runtime.a
+        /usr/local/lib64/libfmt.a
         libdiskann.a
         libcpuinfo.a
         libsimd.a

@@ -21,6 +21,7 @@
 #include "core/schema_common.h"
 #include "core/vector_index.h"
 #include "core/vsag_hnsw.h"
+#include "core/vsag_ivf_flat.h"
 
 namespace lgraph {
 class Schema;

@@ -53,6 +53,7 @@ set(LGRAPH_CORE_SRC
         core/vector_index.cpp
         core/faiss_ivf_flat.cpp
         core/vsag_hnsw.cpp
+        core/vsag_ivf_flat.cpp
         core/wal.cpp
         core/lmdb/mdb.c
         core/lmdb/midl.c
@@ -112,7 +113,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(${TARGET_LGRAPH} PUBLIC
             -laio
             /usr/local/lib64/libvsag_static.a
-            /usr/local/lib64/libvsag_mockimpl.a
+            libio.a
+            libantlr4-autogen.a
+            libantlr4-runtime.a
+            /usr/local/lib64/libfmt.a
             libdiskann.a
             libcpuinfo.a
             libsimd.a
@@ -139,7 +143,10 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_link_libraries(${TARGET_LGRAPH} PUBLIC
                 -laio
                 /usr/local/lib64/libvsag_static.a
-                /usr/local/lib64/libvsag_mockimpl.a
+                libio.a
+                libantlr4-autogen.a
+                libantlr4-runtime.a
+                /usr/local/lib64/libfmt.a
                 libdiskann.a
                 libcpuinfo.a
                 libsimd.a
@@ -156,7 +163,10 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_link_libraries(${TARGET_LGRAPH} PUBLIC
                 -laio
                 /usr/local/lib64/libvsag_static.a
-                /usr/local/lib64/libvsag_mockimpl.a
+                libio.a
+                libantlr4-autogen.a
+                libantlr4-runtime.a
+                /usr/local/lib64/libfmt.a
                 libdiskann.a
                 libcpuinfo.a
                 libsimd.a

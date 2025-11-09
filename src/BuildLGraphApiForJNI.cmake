@@ -56,6 +56,7 @@ set(LGRAPH_CORE_SRC
         core/vector_index.cpp
         core/faiss_ivf_flat.cpp
         core/vsag_hnsw.cpp
+        core/vsag_ivf_flat.cpp
         core/wal.cpp
         core/lmdb/mdb.c
         core/lmdb/midl.c)
