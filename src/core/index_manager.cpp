@@ -115,6 +115,10 @@ IndexManager::IndexManager(KvTransaction& txn, SchemaManager* v_schema_manager,
                 vector_index.reset(dynamic_cast<lgraph::VectorIndex*> (
                     new HNSW(idx.label, idx.field, idx.distance_type, idx.index_type,
                              idx.dimension, {idx.hnsw_m, idx.hnsw_ef_construction})));
+            } else if (idx.index_type == "vsag_ivf_flat") {
+                vector_index.reset(dynamic_cast<lgraph::VectorIndex*> (
+                    new VsagIVFFlat(idx.label, idx.field, idx.distance_type, idx.index_type,
+                                idx.dimension, {idx.ivf_flat_nlist})));
             } else {
                 LOG_ERROR() << "Unknown index type: " << idx.index_type;
             }
@@ -209,6 +213,10 @@ bool IndexManager::AddVectorIndex(KvTransaction& txn, const std::string& label,
         idx.hnsw_m = index_spec[0];
         idx.hnsw_ef_construction = index_spec[1];
         idx.ivf_flat_nlist = 0;
+    } else if (idx.index_type == "vsag_ivf_flat") {
+        idx.hnsw_m = 0;
+        idx.hnsw_ef_construction = 0;
+        idx.ivf_flat_nlist = index_spec[0];
     } else {
         LOG_ERROR() << "Unknown index type: " << idx.index_type;
     }
@@ -224,6 +232,9 @@ bool IndexManager::AddVectorIndex(KvTransaction& txn, const std::string& label,
                                 index_type, vec_dimension, index_spec);
     } else if (idx.index_type == "hnsw") {
         vector_index = std::make_unique<HNSW>(label, field, distance_type,
+                                index_type, vec_dimension, index_spec);
+    } else if (idx.index_type == "vsag_ivf_flat") {
+        vector_index = std::make_unique<VsagIVFFlat>(label, field, distance_type,
                                 index_type, vec_dimension, index_spec);
     } else {
         LOG_ERROR() << "Unknown index type: " << idx.index_type;

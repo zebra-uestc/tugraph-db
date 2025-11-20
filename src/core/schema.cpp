@@ -379,7 +379,7 @@ void Schema::AddVectorToVectorIndex(KvTransaction& txn, VertexId vid, const Valu
         auto& fe = fields_[idx];
         if (fe->GetIsNull(record)) continue;
         VectorIndex* index = fe->GetVectorIndex();
-        if (index->GetIndexType() == "ivf_flat") return;
+        if (index->GetIndexType() == "ivf_flat" || index->GetIndexType() == "vsag_ivf_flat") return;
         auto dim = index->GetVecDimension();
         std::vector<std::vector<float>> floatvector;
         std::vector<int64_t> vids;
@@ -398,7 +398,7 @@ void Schema::DeleteVectorIndex(KvTransaction& txn, VertexId vid, const Value& re
         auto& fe = fields_[idx];
         if (fe->GetIsNull(record)) continue;
         VectorIndex* index = fe->GetVectorIndex();
-        if (index->GetIndexType() == "ivf_flat") return;
+        if (index->GetIndexType() == "ivf_flat" || index->GetIndexType() == "vsag_ivf_flat") return;
         index->Remove({vid});
     }
 }

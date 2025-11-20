@@ -4318,8 +4318,8 @@ void VectorFunc::AddVertexVectorIndex(RTContext *ctx, const cypher::Record *reco
     if (parameter.count("index_type")) {
         index_type = parameter.at("index_type").AsString();
     }
-    CYPHER_ARG_CHECK((index_type == "hnsw" || index_type == "ivf_flat"),
-                     "Index type should be one of them : hnsw, ivf_flat");
+    CYPHER_ARG_CHECK((index_type == "hnsw" || index_type == "ivf_flat" || index_type == "vsag_ivf_flat"),
+                     "Index type should be one of them : hnsw, ivf_flat, vsag_ivf_flat");
     int dimension = 128;
     if (parameter.count("dimension")) {
         dimension = (int)parameter.at("dimension").AsInt64();
@@ -4345,7 +4345,7 @@ void VectorFunc::AddVertexVectorIndex(RTContext *ctx, const cypher::Record *reco
         CYPHER_ARG_CHECK((hnsw_ef_construction <= 1000 && hnsw_ef_construction >= hnsw_m),
                      "hnsw.efConstruction should be an integer in the range [hnsw.m,1000]");
         index_spec = {hnsw_m, hnsw_ef_construction};
-    } else if (index_type == "ivf_flat") {
+    } else if (index_type == "ivf_flat" || index_type == "vsag_ivf_flat") {
         int ivf_flat_nlist = 1;
         if (parameter.count("ivf_flat_nlist")) {
             ivf_flat_nlist = (int)parameter.at("ivf_flat_nlist").AsInt64();
@@ -4354,7 +4354,7 @@ void VectorFunc::AddVertexVectorIndex(RTContext *ctx, const cypher::Record *reco
                      "ivf_flat.nlist should be an integer in the range [1, 65536]");
         index_spec = {ivf_flat_nlist};
     } else {
-        throw lgraph::ReminderException("only support ivf_flat & hnsw now");
+        throw lgraph::ReminderException("only support ivf_flat、hnsw、vsag_ivf_flat now");
     }
     auto ac_db = ctx->galaxy_->OpenGraph(ctx->user_, ctx->graph_);
     bool success = ac_db.AddVectorIndex(true, label, field, index_type,
@@ -4407,7 +4407,7 @@ void VectorFunc::ShowVertexVectorIndex(RTContext *ctx, const cypher::Record *rec
         r.AddConstant(lgraph::FieldData(item.dimension));
         r.AddConstant(lgraph::FieldData(item.distance_type));
         web::json::value js;
-        if (item.index_type == "ivf_flat") {
+        if (item.index_type == "ivf_flat" || item.index_type == "vsag_ivf_flat") {
             js[_TU("ivf_flat.nlist")] = lgraph::ValueToJson(item.ivf_flat_nlist);
         } else if (item.index_type == "hnsw") {
             js[_TU("hnsw.m")] = lgraph::ValueToJson(item.hnsw_m);
@@ -4478,7 +4478,7 @@ void VectorFunc::VertexVectorKnnSearch(RTContext *ctx, const cypher::Record *rec
         }
         CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
                      "hnsw.ef_search should be an integer in the range [1, 1000]");
-    } else if (index->GetIndexType() == "ivf_flat") {
+    } else if (index->GetIndexType() == "ivf_flat" || index->GetIndexType() == "vsag_ivf_flat") {
         parameter_search = 1;
         if (parameter.count("ivf_flat_nprobe")) {
             parameter_search = parameter.at("ivf_flat_nprobe").AsInt64();
@@ -4560,7 +4560,7 @@ void VectorFunc::VertexVectorRangeSearch(RTContext *ctx, const cypher::Record *r
         }
         CYPHER_ARG_CHECK((parameter_search <= 1000 && parameter_search >= 1),
                      "hnsw.ef_search should be an integer in the range [1, 1000]");
-    } else if (index->GetIndexType() == "ivf_flat") {
+    } else if (index->GetIndexType() == "ivf_flat" || index->GetIndexType() == "vsag_ivf_flat") {
         parameter_search = 8;
         if (parameter.count("ivf_flat_nprobe")) {
             parameter_search = parameter.at("ivf_flat_nprobe").AsInt64();
